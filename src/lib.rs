@@ -5,6 +5,9 @@ mod macos;
 #[cfg(target_os = "windows")]
 mod windows;
 
+mod keys;
+pub use keys::*;
+
 #[cfg(target_os = "linux")]
 pub use linux::*;
 
@@ -27,7 +30,7 @@ impl InputDeviceSimulator {
     /// Create a new input simulator.
     pub fn new() -> Result<Self, SimulationError> {
         Ok(Self(PlatformImpl::new()?))
-    } 
+    }
 
     pub fn move_mouse_abs(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
         self.0.move_mouse_abs(x, y)
@@ -76,4 +79,3 @@ impl InputDeviceSimulator {
         self.0.get_screen_size()
     }
 }
-
