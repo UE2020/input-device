@@ -14,5 +14,16 @@ pub fn main() -> Result<(), SimulationError> {
         sim.move_mouse_rel(10, 10)?;
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
+    println!("Testing scroll");
+    for _ in 0..30 {
+        sim.wheel(10, 0)?;
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    println!("Testing click");
+    sim.left_mouse_down()?;
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    sim.move_mouse_rel(0, 20)?;
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    sim.left_mouse_up()?;
     Ok(())
 }

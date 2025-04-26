@@ -38,6 +38,8 @@ impl InputDeviceSimulator {
         let mut rel_mouse_device = VirtualDevice::builder()?
             .name("Simulated input-device Relative Mouse")
             .with_keys(&AttributeSet::from_iter([KeyCode::BTN_LEFT]))?
+            .with_keys(&AttributeSet::from_iter([KeyCode::BTN_MIDDLE]))?
+            .with_keys(&AttributeSet::from_iter([KeyCode::BTN_RIGHT]))?
             .with_relative_axes(&AttributeSet::from_iter([
                 RelativeAxisCode::REL_X,
                 RelativeAxisCode::REL_Y,
@@ -97,6 +99,64 @@ impl InputDeviceSimulator {
         self.rel_mouse_device.emit(&[
             InputEvent::new(EventType::RELATIVE.0, RelativeAxisCode::REL_X.0, x),
             InputEvent::new(EventType::RELATIVE.0, RelativeAxisCode::REL_Y.0, y),
+        ])?;
+        Ok(())
+    }
+
+    pub fn left_mouse_down(&mut self) -> Result<(), SimulationError> {
+        self.rel_mouse_device
+            .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_LEFT.0, 1)])?;
+        Ok(())
+    }
+
+    pub fn middle_mouse_down(&mut self) -> Result<(), SimulationError> {
+        self.rel_mouse_device
+            .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_MIDDLE.0, 1)])?;
+        Ok(())
+    }
+
+    pub fn right_mouse_down(&mut self) -> Result<(), SimulationError> {
+        self.rel_mouse_device.emit(&[InputEvent::new(
+            EventType::KEY.0,
+            KeyCode::BTN_RIGHT.0,
+            1,
+        )])?;
+        Ok(())
+    }
+
+    pub fn left_mouse_up(&mut self) -> Result<(), SimulationError> {
+        self.rel_mouse_device
+            .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_LEFT.0, 0)])?;
+        Ok(())
+    }
+
+    pub fn middle_mouse_up(&mut self) -> Result<(), SimulationError> {
+        self.rel_mouse_device
+            .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_MIDDLE.0, 0)])?;
+        Ok(())
+    }
+
+    pub fn right_mouse_up(&mut self) -> Result<(), SimulationError> {
+        self.rel_mouse_device.emit(&[InputEvent::new(
+            EventType::KEY.0,
+            KeyCode::BTN_RIGHT.0,
+            0,
+        )])?;
+        Ok(())
+    }
+
+    pub fn wheel(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
+        self.rel_mouse_device.emit(&[
+            InputEvent::new(
+                EventType::RELATIVE.0,
+                RelativeAxisCode::REL_WHEEL_HI_RES.0,
+                x,
+            ),
+            InputEvent::new(
+                EventType::RELATIVE.0,
+                RelativeAxisCode::REL_HWHEEL_HI_RES.0,
+                y,
+            ),
         ])?;
         Ok(())
     }
