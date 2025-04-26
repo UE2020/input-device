@@ -7,7 +7,7 @@ use thiserror::Error;
 use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::{connection::Connection, rust_connection::RustConnection};
 
-/// An error returned by the `InputDeviceSimulator`.
+/// An error returned by the `PlatformImpl`.
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("X11 reply error: {0}")]
@@ -20,11 +20,7 @@ pub enum SimulationError {
     X11ConnectError(#[from] x11rb::errors::ConnectError),
 }
 
-/// An input simulator.
-///
-/// This struct contains the resources necessary to simulate all
-/// input events.
-pub struct InputDeviceSimulator {
+pub(crate) struct PlatformImpl {
     conn: RustConnection,
     abs_mouse_device: VirtualDevice,
     rel_mouse_device: VirtualDevice,
@@ -32,9 +28,9 @@ pub struct InputDeviceSimulator {
     //pen_device: VirtualDevice,
 }
 
-impl InputDeviceSimulator {
+impl PlatformImpl {
     /// Create a new input simulator.
-    pub fn new() -> Result<InputDeviceSimulator, SimulationError> {
+    pub(crate) fn new() -> Result<Self, SimulationError> {
         let mut rel_mouse_device = VirtualDevice::builder()?
             .name("Simulated input-device Relative Mouse")
             .with_keys(&AttributeSet::from_iter([KeyCode::BTN_LEFT]))?
@@ -82,7 +78,7 @@ impl InputDeviceSimulator {
         })
     }
 
-    pub fn move_mouse_abs(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
+    pub(crate) fn move_mouse_abs(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
         let (width, height) = self.get_screen_size()?;
         let (x, y) = (
             (x as f64 / width as f64 * 100_000.0).round() as i32,
@@ -95,7 +91,7 @@ impl InputDeviceSimulator {
         Ok(())
     }
 
-    pub fn move_mouse_rel(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
+    pub(crate) fn move_mouse_rel(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
         self.rel_mouse_device.emit(&[
             InputEvent::new(EventType::RELATIVE.0, RelativeAxisCode::REL_X.0, x),
             InputEvent::new(EventType::RELATIVE.0, RelativeAxisCode::REL_Y.0, y),
@@ -103,19 +99,19 @@ impl InputDeviceSimulator {
         Ok(())
     }
 
-    pub fn left_mouse_down(&mut self) -> Result<(), SimulationError> {
+    pub(crate) fn left_mouse_down(&mut self) -> Result<(), SimulationError> {
         self.rel_mouse_device
             .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_LEFT.0, 1)])?;
         Ok(())
     }
 
-    pub fn middle_mouse_down(&mut self) -> Result<(), SimulationError> {
+    pub(crate) fn middle_mouse_down(&mut self) -> Result<(), SimulationError> {
         self.rel_mouse_device
             .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_MIDDLE.0, 1)])?;
         Ok(())
     }
 
-    pub fn right_mouse_down(&mut self) -> Result<(), SimulationError> {
+    pub(crate) fn right_mouse_down(&mut self) -> Result<(), SimulationError> {
         self.rel_mouse_device.emit(&[InputEvent::new(
             EventType::KEY.0,
             KeyCode::BTN_RIGHT.0,
@@ -124,19 +120,19 @@ impl InputDeviceSimulator {
         Ok(())
     }
 
-    pub fn left_mouse_up(&mut self) -> Result<(), SimulationError> {
+    pub(crate) fn left_mouse_up(&mut self) -> Result<(), SimulationError> {
         self.rel_mouse_device
             .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_LEFT.0, 0)])?;
         Ok(())
     }
 
-    pub fn middle_mouse_up(&mut self) -> Result<(), SimulationError> {
+    pub(crate) fn middle_mouse_up(&mut self) -> Result<(), SimulationError> {
         self.rel_mouse_device
             .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_MIDDLE.0, 0)])?;
         Ok(())
     }
 
-    pub fn right_mouse_up(&mut self) -> Result<(), SimulationError> {
+    pub(crate) fn right_mouse_up(&mut self) -> Result<(), SimulationError> {
         self.rel_mouse_device.emit(&[InputEvent::new(
             EventType::KEY.0,
             KeyCode::BTN_RIGHT.0,
@@ -145,7 +141,7 @@ impl InputDeviceSimulator {
         Ok(())
     }
 
-    pub fn wheel(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
+    pub(crate) fn wheel(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
         self.rel_mouse_device.emit(&[
             InputEvent::new(
                 EventType::RELATIVE.0,
@@ -161,14 +157,7 @@ impl InputDeviceSimulator {
         Ok(())
     }
 
-    /// This function gets the combined size of the virtual "screen space", NOT
-    /// the size of the main monitor.
-    ///
-    /// For example, if someone has two 1366x768 monitors side-by-side, this
-    /// function would return 1366*2x768 = 2732x768
-    ///
-    /// This is useful for many calculations involving input simulation.
-    pub fn get_screen_size(&self) -> Result<(i32, i32), SimulationError> {
+    pub(crate) fn get_screen_size(&self) -> Result<(i32, i32), SimulationError> {
         let root_window = self.conn.setup().roots[0].root;
         let geometry = self.conn.get_geometry(root_window)?.reply()?;
         Ok((geometry.width as _, geometry.height as _))
