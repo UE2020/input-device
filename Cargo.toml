@@ -1,0 +1,10 @@
+[package]
+name = "input-device"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+evdev = "0.13.1"
+log = "0.4.27"
+thiserror = "2.0.12"
+x11rb = "0.13.1"
