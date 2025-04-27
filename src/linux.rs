@@ -190,8 +190,23 @@ impl PlatformImpl {
         Ok(())
     }
 
-    //pub(crate) fn key_down(&mut self, key: Key) -> Result<(), SimulationError> {
-    //}
+    pub(crate) fn key_down(&mut self, key: Key) -> Result<(), SimulationError> {
+        self.keyboard_device.emit(&[InputEvent::new(
+            EventType::KEY.0,
+            KeyCode::from(key).0,
+            1,
+        )])?;
+        Ok(())
+    }
+
+    pub(crate) fn key_up(&mut self, key: Key) -> Result<(), SimulationError> {
+        self.keyboard_device.emit(&[InputEvent::new(
+            EventType::KEY.0,
+            KeyCode::from(key).0,
+            0,
+        )])?;
+        Ok(())
+    }
 
     pub(crate) fn get_screen_size(&self) -> Result<(i32, i32), SimulationError> {
         let root_window = self.conn.setup().roots[0].root;
