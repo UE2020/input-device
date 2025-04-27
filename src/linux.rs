@@ -1,3 +1,5 @@
+use crate::Key;
+use strum::IntoEnumIterator;
 use evdev::{
     AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent, KeyCode, RelativeAxisCode,
     UinputAbsSetup, uinput::VirtualDevice,
@@ -24,6 +26,9 @@ pub(crate) struct PlatformImpl {
     conn: RustConnection,
     abs_mouse_device: VirtualDevice,
     rel_mouse_device: VirtualDevice,
+    keyboard_device: VirtualDevice,
+    wheel_x: i32,
+    wheel_y: i32,
     //touch_device: VirtualDevice,
     //pen_device: VirtualDevice,
 }
@@ -31,11 +36,19 @@ pub(crate) struct PlatformImpl {
 impl PlatformImpl {
     /// Create a new input simulator.
     pub(crate) fn new() -> Result<Self, SimulationError> {
+        let mut keyboard_device = VirtualDevice::builder()?
+            .name("Simulated input-device Keyboard")
+            .with_keys(&AttributeSet::from_iter(Key::iter().map(|k| KeyCode::from(k))))?
+            .build()?;
+
+        for path in keyboard_device.enumerate_dev_nodes_blocking()? {
+            let path = path?;
+            info!("Keyboard device available as {}", path.display());
+        }
+
         let mut rel_mouse_device = VirtualDevice::builder()?
             .name("Simulated input-device Relative Mouse")
-            .with_keys(&AttributeSet::from_iter([KeyCode::BTN_LEFT]))?
-            .with_keys(&AttributeSet::from_iter([KeyCode::BTN_MIDDLE]))?
-            .with_keys(&AttributeSet::from_iter([KeyCode::BTN_RIGHT]))?
+            .with_keys(&AttributeSet::from_iter([KeyCode::BTN_LEFT, KeyCode::BTN_MIDDLE, KeyCode::BTN_RIGHT]))?
             .with_relative_axes(&AttributeSet::from_iter([
                 RelativeAxisCode::REL_X,
                 RelativeAxisCode::REL_Y,
@@ -48,7 +61,7 @@ impl PlatformImpl {
 
         for path in rel_mouse_device.enumerate_dev_nodes_blocking()? {
             let path = path?;
-            info!("Available as {}", path.display());
+            info!("Relative mouse device available as {}", path.display());
         }
 
         let mut abs_mouse_device = VirtualDevice::builder()?
@@ -66,14 +79,17 @@ impl PlatformImpl {
 
         for path in abs_mouse_device.enumerate_dev_nodes_blocking()? {
             let path = path?;
-            info!("Available as {}", path.display());
+            info!("Absolute mouse device available as {}", path.display());
         }
 
         let (conn, _screen_num) = x11rb::connect(None)?;
 
         Ok(Self {
+            wheel_x: 0,
+            wheel_y: 0,
             rel_mouse_device,
             abs_mouse_device,
+            keyboard_device,
             conn,
         })
     }
@@ -106,8 +122,11 @@ impl PlatformImpl {
     }
 
     pub(crate) fn middle_mouse_down(&mut self) -> Result<(), SimulationError> {
-        self.rel_mouse_device
-            .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_MIDDLE.0, 1)])?;
+        self.rel_mouse_device.emit(&[InputEvent::new(
+            EventType::KEY.0,
+            KeyCode::BTN_MIDDLE.0,
+            1,
+        )])?;
         Ok(())
     }
 
@@ -127,8 +146,11 @@ impl PlatformImpl {
     }
 
     pub(crate) fn middle_mouse_up(&mut self) -> Result<(), SimulationError> {
-        self.rel_mouse_device
-            .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_MIDDLE.0, 0)])?;
+        self.rel_mouse_device.emit(&[InputEvent::new(
+            EventType::KEY.0,
+            KeyCode::BTN_MIDDLE.0,
+            0,
+        )])?;
         Ok(())
     }
 
@@ -142,18 +164,47 @@ impl PlatformImpl {
     }
 
     pub(crate) fn wheel(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
-        self.rel_mouse_device.emit(&[
+        self.wheel_x += x;
+        self.wheel_y += y;
+        let mut events = vec![
             InputEvent::new(
                 EventType::RELATIVE.0,
-                RelativeAxisCode::REL_WHEEL_HI_RES.0,
+                RelativeAxisCode::REL_HWHEEL_HI_RES.0,
                 x,
             ),
             InputEvent::new(
                 EventType::RELATIVE.0,
-                RelativeAxisCode::REL_HWHEEL_HI_RES.0,
+                RelativeAxisCode::REL_WHEEL_HI_RES.0,
                 y,
             ),
-        ])?;
+        ];
+        if self.wheel_x.abs() > 120 {
+            events.push(InputEvent::new(EventType::RELATIVE.0, RelativeAxisCode::REL_HWHEEL.0, self.wheel_x / 120));
+            self.wheel_x = self.wheel_x % 120;
+        }
+        if self.wheel_y.abs() > 120 {
+            events.push(InputEvent::new(EventType::RELATIVE.0, RelativeAxisCode::REL_WHEEL.0, self.wheel_y / 120));
+            self.wheel_y = self.wheel_y % 120;
+        }
+        self.rel_mouse_device.emit(&events)?;
+        Ok(())
+    }
+
+    pub(crate) fn key_down(&mut self, key: Key) -> Result<(), SimulationError> {
+        self.keyboard_device.emit(&[InputEvent::new(
+            EventType::KEY.0,
+            KeyCode::from(key).0,
+            1,
+        )])?;
+        Ok(())
+    }
+
+    pub(crate) fn key_up(&mut self, key: Key) -> Result<(), SimulationError> {
+        self.keyboard_device.emit(&[InputEvent::new(
+            EventType::KEY.0,
+            KeyCode::from(key).0,
+            0,
+        )])?;
         Ok(())
     }
 
@@ -161,5 +212,167 @@ impl PlatformImpl {
         let root_window = self.conn.setup().roots[0].root;
         let geometry = self.conn.get_geometry(root_window)?.reply()?;
         Ok((geometry.width as _, geometry.height as _))
+    }
+}
+
+impl From<Key> for KeyCode {
+    fn from(key: Key) -> Self {
+        match key {
+            Key::Esc => KeyCode::KEY_ESC,
+            Key::Num1 => KeyCode::KEY_1,
+            Key::Num2 => KeyCode::KEY_2,
+            Key::Num3 => KeyCode::KEY_3,
+            Key::Num4 => KeyCode::KEY_4,
+            Key::Num5 => KeyCode::KEY_5,
+            Key::Num6 => KeyCode::KEY_6,
+            Key::Num7 => KeyCode::KEY_7,
+            Key::Num8 => KeyCode::KEY_8,
+            Key::Num9 => KeyCode::KEY_9,
+            Key::Num0 => KeyCode::KEY_0,
+            Key::Minus => KeyCode::KEY_MINUS,
+            Key::Equal => KeyCode::KEY_EQUAL,
+            Key::Backspace => KeyCode::KEY_BACKSPACE,
+            Key::Tab => KeyCode::KEY_TAB,
+            Key::Q => KeyCode::KEY_Q,
+            Key::W => KeyCode::KEY_W,
+            Key::E => KeyCode::KEY_E,
+            Key::R => KeyCode::KEY_R,
+            Key::T => KeyCode::KEY_T,
+            Key::Y => KeyCode::KEY_Y,
+            Key::U => KeyCode::KEY_U,
+            Key::I => KeyCode::KEY_I,
+            Key::O => KeyCode::KEY_O,
+            Key::P => KeyCode::KEY_P,
+            Key::LeftBrace => KeyCode::KEY_LEFTBRACE,
+            Key::RightBrace => KeyCode::KEY_RIGHTBRACE,
+            Key::Enter => KeyCode::KEY_ENTER,
+            Key::LeftCtrl => KeyCode::KEY_LEFTCTRL,
+            Key::A => KeyCode::KEY_A,
+            Key::S => KeyCode::KEY_S,
+            Key::D => KeyCode::KEY_D,
+            Key::F => KeyCode::KEY_F,
+            Key::G => KeyCode::KEY_G,
+            Key::H => KeyCode::KEY_H,
+            Key::J => KeyCode::KEY_J,
+            Key::K => KeyCode::KEY_K,
+            Key::L => KeyCode::KEY_L,
+            Key::Semicolon => KeyCode::KEY_SEMICOLON,
+            Key::Apostrophe => KeyCode::KEY_APOSTROPHE,
+            Key::Grave => KeyCode::KEY_GRAVE,
+            Key::LeftShift => KeyCode::KEY_LEFTSHIFT,
+            Key::Backslash => KeyCode::KEY_BACKSLASH,
+            Key::Z => KeyCode::KEY_Z,
+            Key::X => KeyCode::KEY_X,
+            Key::C => KeyCode::KEY_C,
+            Key::V => KeyCode::KEY_V,
+            Key::B => KeyCode::KEY_B,
+            Key::N => KeyCode::KEY_N,
+            Key::M => KeyCode::KEY_M,
+            Key::Comma => KeyCode::KEY_COMMA,
+            Key::Dot => KeyCode::KEY_DOT,
+            Key::Slash => KeyCode::KEY_SLASH,
+            Key::RightShift => KeyCode::KEY_RIGHTSHIFT,
+            Key::KpAsterisk => KeyCode::KEY_KPASTERISK,
+            Key::LeftAlt => KeyCode::KEY_LEFTALT,
+            Key::Space => KeyCode::KEY_SPACE,
+            Key::CapsLock => KeyCode::KEY_CAPSLOCK,
+            Key::F1 => KeyCode::KEY_F1,
+            Key::F2 => KeyCode::KEY_F2,
+            Key::F3 => KeyCode::KEY_F3,
+            Key::F4 => KeyCode::KEY_F4,
+            Key::F5 => KeyCode::KEY_F5,
+            Key::F6 => KeyCode::KEY_F6,
+            Key::F7 => KeyCode::KEY_F7,
+            Key::F8 => KeyCode::KEY_F8,
+            Key::F9 => KeyCode::KEY_F9,
+            Key::F10 => KeyCode::KEY_F10,
+            Key::NumLock => KeyCode::KEY_NUMLOCK,
+            Key::ScrollLock => KeyCode::KEY_SCROLLLOCK,
+            Key::Kp7 => KeyCode::KEY_KP7,
+            Key::Kp8 => KeyCode::KEY_KP8,
+            Key::Kp9 => KeyCode::KEY_KP9,
+            Key::KpMinus => KeyCode::KEY_KPMINUS,
+            Key::Kp4 => KeyCode::KEY_KP4,
+            Key::Kp5 => KeyCode::KEY_KP5,
+            Key::Kp6 => KeyCode::KEY_KP6,
+            Key::KpPlus => KeyCode::KEY_KPPLUS,
+            Key::Kp1 => KeyCode::KEY_KP1,
+            Key::Kp2 => KeyCode::KEY_KP2,
+            Key::Kp3 => KeyCode::KEY_KP3,
+            Key::Kp0 => KeyCode::KEY_KP0,
+            Key::KpDot => KeyCode::KEY_KPDOT,
+            Key::ZenkakuHankaku => KeyCode::KEY_ZENKAKUHANKAKU,
+            Key::IntlBackslash => KeyCode::KEY_102ND,
+            Key::F11 => KeyCode::KEY_F11,
+            Key::F12 => KeyCode::KEY_F12,
+            Key::Ro => KeyCode::KEY_RO,
+            Key::Katakana => KeyCode::KEY_KATAKANA,
+            Key::Hiragana => KeyCode::KEY_HIRAGANA,
+            Key::Henkan => KeyCode::KEY_HENKAN,
+            Key::KatakanaHiragana => KeyCode::KEY_KATAKANAHIRAGANA,
+            Key::Muhenkan => KeyCode::KEY_MUHENKAN,
+            Key::KpJpComma => KeyCode::KEY_KPJPCOMMA,
+            Key::KpEnter => KeyCode::KEY_KPENTER,
+            Key::RightCtrl => KeyCode::KEY_RIGHTCTRL,
+            Key::KpSlash => KeyCode::KEY_KPSLASH,
+            Key::SysRq => KeyCode::KEY_SYSRQ,
+            Key::RightAlt => KeyCode::KEY_RIGHTALT,
+            Key::Home => KeyCode::KEY_HOME,
+            Key::Up => KeyCode::KEY_UP,
+            Key::PageUp => KeyCode::KEY_PAGEUP,
+            Key::Left => KeyCode::KEY_LEFT,
+            Key::Right => KeyCode::KEY_RIGHT,
+            Key::End => KeyCode::KEY_END,
+            Key::Down => KeyCode::KEY_DOWN,
+            Key::PageDown => KeyCode::KEY_PAGEDOWN,
+            Key::Insert => KeyCode::KEY_INSERT,
+            Key::Delete => KeyCode::KEY_DELETE,
+            Key::Macro => KeyCode::KEY_MACRO,
+            Key::Mute => KeyCode::KEY_MUTE,
+            Key::VolumeDown => KeyCode::KEY_VOLUMEDOWN,
+            Key::VolumeUp => KeyCode::KEY_VOLUMEUP,
+            Key::Power => KeyCode::KEY_POWER,
+            Key::KpEqual => KeyCode::KEY_KPEQUAL,
+            Key::KpPlusMinus => KeyCode::KEY_KPPLUSMINUS,
+            Key::Pause => KeyCode::KEY_PAUSE,
+            Key::KpComma => KeyCode::KEY_KPCOMMA,
+            Key::Hanguel => KeyCode::KEY_HANGEUL,
+            Key::Hanja => KeyCode::KEY_HANJA,
+            Key::Yen => KeyCode::KEY_YEN,
+            Key::LeftMeta => KeyCode::KEY_LEFTMETA,
+            Key::RightMeta => KeyCode::KEY_RIGHTMETA,
+            Key::Compose => KeyCode::KEY_COMPOSE,
+            Key::Stop => KeyCode::KEY_STOP,
+            Key::Help => KeyCode::KEY_HELP,
+            Key::Calc => KeyCode::KEY_CALC,
+            Key::Sleep => KeyCode::KEY_SLEEP,
+            Key::WakeUp => KeyCode::KEY_WAKEUP,
+            Key::Mail => KeyCode::KEY_MAIL,
+            Key::Bookmarks => KeyCode::KEY_BOOKMARKS,
+            Key::Computer => KeyCode::KEY_COMPUTER,
+            Key::Back => KeyCode::KEY_BACK,
+            Key::Forward => KeyCode::KEY_FORWARD,
+            Key::NextSong => KeyCode::KEY_NEXTSONG,
+            Key::PlayPause => KeyCode::KEY_PLAYPAUSE,
+            Key::PreviousSong => KeyCode::KEY_PREVIOUSSONG,
+            Key::StopCD => KeyCode::KEY_STOPCD,
+            Key::Homepage => KeyCode::KEY_HOMEPAGE,
+            Key::Refresh => KeyCode::KEY_REFRESH,
+            Key::F13 => KeyCode::KEY_F13,
+            Key::F14 => KeyCode::KEY_F14,
+            Key::F15 => KeyCode::KEY_F15,
+            Key::F23 => KeyCode::KEY_F23,
+            Key::Camera => KeyCode::KEY_CAMERA,
+            Key::Search => KeyCode::KEY_SEARCH,
+            Key::BrightnessDown => KeyCode::KEY_BRIGHTNESSDOWN,
+            Key::BrightnessUp => KeyCode::KEY_BRIGHTNESSUP,
+            Key::Media => KeyCode::KEY_MEDIA,
+            Key::SwitchVideoMode => KeyCode::KEY_SWITCHVIDEOMODE,
+            Key::Battery => KeyCode::KEY_BATTERY,
+            Key::Wlan => KeyCode::KEY_WLAN,
+            Key::Dvd => KeyCode::KEY_DVD,
+            Key::FnEsc => KeyCode::KEY_FN_ESC,
+            _ => KeyCode::KEY_UNKNOWN,
+        }
     }
 }
