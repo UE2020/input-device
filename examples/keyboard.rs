@@ -1,4 +1,4 @@
-use input_device::{Key, InputDeviceSimulator, SimulationError};
+use input_device::{InputDeviceSimulator, Key, SimulationError};
 
 pub fn main() -> Result<(), SimulationError> {
     let mut sim = InputDeviceSimulator::new()?;
