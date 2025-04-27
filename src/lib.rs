@@ -68,6 +68,14 @@ impl InputDeviceSimulator {
         self.0.wheel(x, y)
     }
 
+    pub fn key_down(&mut self, key: Key) -> Result<(), SimulationError> {
+        self.0.key_down(key)
+    }
+
+    pub fn key_up(&mut self, key: Key) -> Result<(), SimulationError> {
+        self.0.key_up(key)
+    }
+
     /// This function gets the combined size of the virtual "screen space", NOT
     /// the size of the main monitor.
     ///

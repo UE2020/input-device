@@ -372,7 +372,7 @@ impl From<Key> for KeyCode {
             Key::Wlan => KeyCode::KEY_WLAN,
             Key::Dvd => KeyCode::KEY_DVD,
             Key::FnEsc => KeyCode::KEY_FN_ESC,
-            _ => unimplemented!(),
+            _ => KeyCode::KEY_UNKNOWN,
         }
     }
 }
