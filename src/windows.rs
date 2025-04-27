@@ -2,7 +2,6 @@ use thiserror::Error;
 use windows::Win32::UI::Input::KeyboardAndMouse;
 use windows::Win32::UI::WindowsAndMessaging;
 
-/// An error returned by the `PlatformImpl`.
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("Windows error: {0}")]
@@ -12,7 +11,6 @@ pub enum SimulationError {
 pub(crate) struct PlatformImpl;
 
 impl PlatformImpl {
-    /// Create a new input simulator.
     pub(crate) fn new() -> Result<Self, SimulationError> {
         Ok(Self)
     }

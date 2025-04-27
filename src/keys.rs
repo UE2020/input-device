@@ -1,5 +1,20 @@
 use strum_macros::EnumIter;
 
+/// A physical keyboard key.
+///
+/// These keys represent __physical__ keyboard keys, which
+/// means that each variant only represents a certain
+/// location on the keyboard. In other terms, they are
+/// layout independent. For example, simulating a press of
+/// [Key::Q] will trigger the key located where the 'Q' key
+/// appears on a standard QWERTY layout, even if the active
+/// keyboard layout maps that physical key to a different
+/// character (such as 'A' in an AZERTY layout).
+///
+/// This makes [`Key`] suitable for applications that need
+/// to work based on the physical key positions rather than
+/// the characters they produce, such as games or custom
+/// input handling.
 #[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Key {
     Esc,
@@ -123,6 +138,7 @@ pub enum Key {
     Hanguel,
     Hanja,
     Yen,
+    /// Corresponds to Command on macOS
     LeftMeta,
     RightMeta,
     Compose,

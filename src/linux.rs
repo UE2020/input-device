@@ -9,7 +9,7 @@ use thiserror::Error;
 use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::{connection::Connection, rust_connection::RustConnection};
 
-/// An error returned by the `PlatformImpl`.
+/// An error returned by the [InputSimulator](crate::InputSimulator).
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("X11 reply error: {0}")]

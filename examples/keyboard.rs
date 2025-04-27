@@ -1,7 +1,7 @@
-use input_device::{Key, InputDeviceSimulator, SimulationError};
+use input_device::{Key, InputSimulator, SimulationError};
 
 pub fn main() -> Result<(), SimulationError> {
-    let mut sim = InputDeviceSimulator::new()?;
+    let mut sim = InputSimulator::new()?;
     std::thread::sleep(std::time::Duration::from_secs(1));
     sim.key_down(Key::A)?;
     std::thread::sleep(std::time::Duration::from_secs(3));
