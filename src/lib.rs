@@ -43,7 +43,6 @@
 //! }
 //! ```
 
-
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -120,6 +119,18 @@ impl InputSimulator {
 
     pub fn key_up(&mut self, key: Key) -> Result<(), SimulationError> {
         self.0.key_up(key)
+    }
+
+    pub fn touch_down(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
+        self.0.touch_down(slot, x, y)
+    }
+
+    pub fn touch_up(&mut self, slot: i32) -> Result<(), SimulationError> {
+        self.0.touch_up(slot)
+    }
+
+    pub fn touch_move(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
+        self.0.touch_move(slot, x, y)
     }
 
     /// This function gets the combined size of the virtual "screen space", NOT

@@ -1,10 +1,10 @@
 use crate::Key;
-use strum::IntoEnumIterator;
 use evdev::{
-    AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent, KeyCode, RelativeAxisCode,
-    UinputAbsSetup, uinput::VirtualDevice,
+    AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent, KeyCode, PropType,
+    RelativeAxisCode, UinputAbsSetup, uinput::VirtualDevice,
 };
 use log::info;
+use strum::IntoEnumIterator;
 use thiserror::Error;
 use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::{connection::Connection, rust_connection::RustConnection};
@@ -29,7 +29,7 @@ pub(crate) struct PlatformImpl {
     keyboard_device: VirtualDevice,
     wheel_x: i32,
     wheel_y: i32,
-    //touch_device: VirtualDevice,
+    touch_device: VirtualDevice,
     //pen_device: VirtualDevice,
 }
 
@@ -38,7 +38,9 @@ impl PlatformImpl {
     pub(crate) fn new() -> Result<Self, SimulationError> {
         let mut keyboard_device = VirtualDevice::builder()?
             .name("Simulated input-device Keyboard")
-            .with_keys(&AttributeSet::from_iter(Key::iter().map(|k| KeyCode::from(k))))?
+            .with_keys(&AttributeSet::from_iter(
+                Key::iter().map(|k| KeyCode::from(k)),
+            ))?
             .build()?;
 
         for path in keyboard_device.enumerate_dev_nodes_blocking()? {
@@ -48,7 +50,11 @@ impl PlatformImpl {
 
         let mut rel_mouse_device = VirtualDevice::builder()?
             .name("Simulated input-device Relative Mouse")
-            .with_keys(&AttributeSet::from_iter([KeyCode::BTN_LEFT, KeyCode::BTN_MIDDLE, KeyCode::BTN_RIGHT]))?
+            .with_keys(&AttributeSet::from_iter([
+                KeyCode::BTN_LEFT,
+                KeyCode::BTN_MIDDLE,
+                KeyCode::BTN_RIGHT,
+            ]))?
             .with_relative_axes(&AttributeSet::from_iter([
                 RelativeAxisCode::REL_X,
                 RelativeAxisCode::REL_Y,
@@ -82,6 +88,32 @@ impl PlatformImpl {
             info!("Absolute mouse device available as {}", path.display());
         }
 
+        let mut touch_device = VirtualDevice::builder()?
+            .name("Simulated input-device Touchscreen")
+            .with_absolute_axis(&UinputAbsSetup::new(
+                AbsoluteAxisCode::ABS_MT_SLOT,
+                AbsInfo::new(0, 0, 9, 0, 0, 0),
+            ))?
+            .with_absolute_axis(&UinputAbsSetup::new(
+                AbsoluteAxisCode::ABS_MT_POSITION_X,
+                AbsInfo::new(0, 0, 100_000, 0, 0, 0),
+            ))?
+            .with_absolute_axis(&UinputAbsSetup::new(
+                AbsoluteAxisCode::ABS_MT_POSITION_Y,
+                AbsInfo::new(0, 0, 100_000, 0, 0, 0),
+            ))?
+            .with_absolute_axis(&UinputAbsSetup::new(
+                AbsoluteAxisCode::ABS_MT_TRACKING_ID,
+                AbsInfo::new(0, 0, 65535, 0, 0, 0),
+            ))?
+            .with_properties(&AttributeSet::from_iter([PropType::DIRECT]))?
+            .build()?;
+
+        for path in touch_device.enumerate_dev_nodes_blocking()? {
+            let path = path?;
+            info!("Touchscreen device available as {}", path.display());
+        }
+
         let (conn, _screen_num) = x11rb::connect(None)?;
 
         Ok(Self {
@@ -90,6 +122,7 @@ impl PlatformImpl {
             rel_mouse_device,
             abs_mouse_device,
             keyboard_device,
+            touch_device,
             conn,
         })
     }
@@ -179,11 +212,19 @@ impl PlatformImpl {
             ),
         ];
         if self.wheel_x.abs() > 120 {
-            events.push(InputEvent::new(EventType::RELATIVE.0, RelativeAxisCode::REL_HWHEEL.0, self.wheel_x / 120));
+            events.push(InputEvent::new(
+                EventType::RELATIVE.0,
+                RelativeAxisCode::REL_HWHEEL.0,
+                self.wheel_x / 120,
+            ));
             self.wheel_x = self.wheel_x % 120;
         }
         if self.wheel_y.abs() > 120 {
-            events.push(InputEvent::new(EventType::RELATIVE.0, RelativeAxisCode::REL_WHEEL.0, self.wheel_y / 120));
+            events.push(InputEvent::new(
+                EventType::RELATIVE.0,
+                RelativeAxisCode::REL_WHEEL.0,
+                self.wheel_y / 120,
+            ));
             self.wheel_y = self.wheel_y % 120;
         }
         self.rel_mouse_device.emit(&events)?;
@@ -191,20 +232,51 @@ impl PlatformImpl {
     }
 
     pub(crate) fn key_down(&mut self, key: Key) -> Result<(), SimulationError> {
-        self.keyboard_device.emit(&[InputEvent::new(
-            EventType::KEY.0,
-            KeyCode::from(key).0,
-            1,
-        )])?;
+        self.keyboard_device
+            .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::from(key).0, 1)])?;
         Ok(())
     }
 
     pub(crate) fn key_up(&mut self, key: Key) -> Result<(), SimulationError> {
-        self.keyboard_device.emit(&[InputEvent::new(
-            EventType::KEY.0,
-            KeyCode::from(key).0,
-            0,
-        )])?;
+        self.keyboard_device
+            .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::from(key).0, 0)])?;
+        Ok(())
+    }
+
+    pub(crate) fn touch_down(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
+        let (width, height) = self.get_screen_size()?;
+        let (x, y) = (
+            (x as f64 / width as f64 * 100_000.0).round() as i32,
+            (y as f64 / height as f64 * 100_000.0).round() as i32,
+        );
+        self.touch_device.emit(&[
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_SLOT.0, slot),
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_TRACKING_ID.0, slot),
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_POSITION_X.0, x),
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_POSITION_Y.0, y),
+        ])?;
+        Ok(())
+    }
+
+    pub(crate) fn touch_up(&mut self, slot: i32) -> Result<(), SimulationError> {
+        self.touch_device.emit(&[
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_SLOT.0, slot),
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_TRACKING_ID.0, -1),
+        ])?;
+        Ok(())
+    }
+
+    pub(crate) fn touch_move(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
+        let (width, height) = self.get_screen_size()?;
+        let (x, y) = (
+            (x as f64 / width as f64 * 100_000.0).round() as i32,
+            (y as f64 / height as f64 * 100_000.0).round() as i32,
+        );
+        self.touch_device.emit(&[
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_SLOT.0, slot),
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_POSITION_X.0, x),
+            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_POSITION_Y.0, y),
+        ])?;
         Ok(())
     }
 
