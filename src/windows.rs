@@ -1,6 +1,7 @@
 use crate::Key;
 use thiserror::Error;
 use windows::Win32::UI::Controls;
+use windows::Win32::UI::HiDpi;
 use windows::Win32::UI::Input::KeyboardAndMouse;
 use windows::Win32::UI::Input::Pointer;
 use windows::Win32::UI::WindowsAndMessaging;
@@ -20,6 +21,7 @@ pub(crate) struct PlatformImpl {
 
 impl PlatformImpl {
     pub(crate) fn new() -> Result<Self, SimulationError> {
+        unsafe { HiDpi::SetProcessDpiAwareness(HiDpi::PROCESS_PER_MONITOR_DPI_AWARE)?; }
         Ok(Self {
             touch_device: unsafe {
                 Controls::CreateSyntheticPointerDevice(
@@ -36,7 +38,7 @@ impl PlatformImpl {
                 )?
             },
             touches: [(0, 0); 10],
-            last_pressure: 0.,
+            last_pressure: 0.0,
         })
     }
 
@@ -306,9 +308,9 @@ impl PlatformImpl {
         tilt_x: i32,
         tilt_y: i32,
     ) -> Result<(), SimulationError> {
-        let pen_mask = if pressure == 0. {
+        let pen_mask = if pressure == 0.0 {
             Pointer::POINTER_FLAG_UP
-        } else if self.last_pressure == 0. {
+        } else if self.last_pressure == 0.0 {
             Pointer::POINTER_FLAG_DOWN
                 | Pointer::POINTER_FLAG_INRANGE
                 | Pointer::POINTER_FLAG_INCONTACT
@@ -327,7 +329,7 @@ impl PlatformImpl {
             | WindowsAndMessaging::PEN_MASK_TILT_Y;
         input.Anonymous.penInfo.pointerInfo.ptPixelLocation.x = x;
         input.Anonymous.penInfo.pointerInfo.ptPixelLocation.y = y;
-        input.Anonymous.penInfo.pressure = (pressure * 1024.) as u32;
+        input.Anonymous.penInfo.pressure = (pressure * 1024.0) as u32;
         input.Anonymous.penInfo.tiltX = tilt_x;
         input.Anonymous.penInfo.tiltY = tilt_y;
 
@@ -337,6 +339,15 @@ impl PlatformImpl {
             Pointer::InjectSyntheticPointerInput(self.pen_device, &[input])?;
         }
         Ok(())
+    }
+}
+
+impl Drop for PlatformImpl {
+    fn drop(&mut self) {
+        unsafe {
+            Controls::DestroySyntheticPointerDevice(self.touch_device);
+            Controls::DestroySyntheticPointerDevice(self.pen_device);
+        }
     }
 }
 
