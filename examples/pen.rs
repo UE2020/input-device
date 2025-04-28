@@ -10,6 +10,7 @@ pub fn main() -> Result<(), SimulationError> {
         let x = 2.0 * theta * theta.cos() + center_x as f64;
         let y = 2.0 * theta * theta.sin() + center_y as f64;
         sim.pen(x as i32, y as i32, 0.5, 0, 0)?;
+        std::thread::sleep(std::time::Duration::from_millis(4));
     }
     std::thread::sleep(std::time::Duration::from_millis(100));
     sim.pen(0, 0, 0.0, 0, 0)?;
