@@ -27,10 +27,11 @@ pub(crate) struct PlatformImpl {
     abs_mouse_device: VirtualDevice,
     rel_mouse_device: VirtualDevice,
     keyboard_device: VirtualDevice,
+    touch_device: VirtualDevice,
+    pen_device: VirtualDevice,
     wheel_x: i32,
     wheel_y: i32,
-    touch_device: VirtualDevice,
-    //pen_device: VirtualDevice,
+    last_pressure: f64
 }
 
 impl PlatformImpl {
@@ -114,15 +115,49 @@ impl PlatformImpl {
             info!("Touchscreen device available as {}", path.display());
         }
 
+        let mut pen_device = VirtualDevice::builder()?
+            .name("Simulated input-device Pen Device")
+            .with_absolute_axis(&UinputAbsSetup::new(
+                AbsoluteAxisCode::ABS_X,
+                AbsInfo::new(0, 0, 100_000, 0, 0, 0),
+            ))?
+            .with_absolute_axis(&UinputAbsSetup::new(
+                AbsoluteAxisCode::ABS_Y,
+                AbsInfo::new(0, 0, 100_000, 0, 0, 0),
+            ))?
+            .with_absolute_axis(&UinputAbsSetup::new(
+                AbsoluteAxisCode::ABS_PRESSURE,
+                AbsInfo::new(0, 0, 100_000, 0, 0, 0),
+            ))?
+            .with_absolute_axis(&UinputAbsSetup::new(
+                AbsoluteAxisCode::ABS_TILT_X,
+                AbsInfo::new(0, -90, 90, 0, 0, 0),
+            ))?
+            .with_absolute_axis(&UinputAbsSetup::new(
+                AbsoluteAxisCode::ABS_TILT_Y,
+                AbsInfo::new(0, -90, 90, 0, 0, 0),
+            ))?
+            .with_keys(&AttributeSet::from_iter([KeyCode::BTN_TOOL_PEN, KeyCode::BTN_TOUCH]))?
+            .with_properties(&AttributeSet::from_iter([PropType::DIRECT]))?
+            .with_properties(&AttributeSet::from_iter([PropType::POINTER]))?
+            .build()?;
+
+        for path in pen_device.enumerate_dev_nodes_blocking()? {
+            let path = path?;
+            info!("Pen device available as {}", path.display());
+        }
+
         let (conn, _screen_num) = x11rb::connect(None)?;
 
         Ok(Self {
             wheel_x: 0,
             wheel_y: 0,
+            last_pressure: 0.0,
             rel_mouse_device,
             abs_mouse_device,
             keyboard_device,
             touch_device,
+            pen_device,
             conn,
         })
     }
@@ -251,9 +286,21 @@ impl PlatformImpl {
         );
         self.touch_device.emit(&[
             InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_SLOT.0, slot),
-            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_TRACKING_ID.0, slot),
-            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_POSITION_X.0, x),
-            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_POSITION_Y.0, y),
+            InputEvent::new(
+                EventType::ABSOLUTE.0,
+                AbsoluteAxisCode::ABS_MT_TRACKING_ID.0,
+                slot,
+            ),
+            InputEvent::new(
+                EventType::ABSOLUTE.0,
+                AbsoluteAxisCode::ABS_MT_POSITION_X.0,
+                x,
+            ),
+            InputEvent::new(
+                EventType::ABSOLUTE.0,
+                AbsoluteAxisCode::ABS_MT_POSITION_Y.0,
+                y,
+            ),
         ])?;
         Ok(())
     }
@@ -261,7 +308,11 @@ impl PlatformImpl {
     pub(crate) fn touch_up(&mut self, slot: i32) -> Result<(), SimulationError> {
         self.touch_device.emit(&[
             InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_SLOT.0, slot),
-            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_TRACKING_ID.0, -1),
+            InputEvent::new(
+                EventType::ABSOLUTE.0,
+                AbsoluteAxisCode::ABS_MT_TRACKING_ID.0,
+                -1,
+            ),
         ])?;
         Ok(())
     }
@@ -274,9 +325,43 @@ impl PlatformImpl {
         );
         self.touch_device.emit(&[
             InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_SLOT.0, slot),
-            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_POSITION_X.0, x),
-            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_MT_POSITION_Y.0, y),
+            InputEvent::new(
+                EventType::ABSOLUTE.0,
+                AbsoluteAxisCode::ABS_MT_POSITION_X.0,
+                x,
+            ),
+            InputEvent::new(
+                EventType::ABSOLUTE.0,
+                AbsoluteAxisCode::ABS_MT_POSITION_Y.0,
+                y,
+            ),
         ])?;
+        Ok(())
+    }
+
+    pub(crate) fn pen(&mut self, x: i32, y: i32, pressure: f64, tilt_x: i32, tilt_y: i32) -> Result<(), SimulationError> {
+        let (width, height) = self.get_screen_size()?;
+        let (x, y) = (
+            (x as f64 / width as f64 * 100_000.0).round() as i32,
+            (y as f64 / height as f64 * 100_000.0).round() as i32,
+        );
+        let scaled_pressure = (pressure * 100_000.0).round() as i32;
+        let mut events = vec![];
+        if self.last_pressure < 0.00001 && pressure >= 0.00001 {
+            events.push(InputEvent::new(EventType::KEY.0, KeyCode::BTN_TOOL_PEN.0, 1));
+            events.push(InputEvent::new(EventType::KEY.0, KeyCode::BTN_TOUCH.0, 1));
+        }
+        events.push(InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_X.0, x));
+        events.push(InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_Y.0, y));
+        events.push(InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_PRESSURE.0, scaled_pressure));
+        events.push(InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_TILT_X.0, tilt_x));
+        events.push(InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_TILT_Y.0, tilt_y));
+        if self.last_pressure >= 0.00001 && pressure < 0.00001 {
+            events.push(InputEvent::new(EventType::KEY.0, KeyCode::BTN_TOUCH.0, 0));
+            events.push(InputEvent::new(EventType::KEY.0, KeyCode::BTN_TOOL_PEN.0, 0));
+        }
+        self.pen_device.emit(&events)?;
+        self.last_pressure = pressure;
         Ok(())
     }
 
