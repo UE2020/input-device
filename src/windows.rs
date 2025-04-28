@@ -331,8 +331,6 @@ impl PlatformImpl {
         input.Anonymous.penInfo.tiltX = tilt_x;
         input.Anonymous.penInfo.tiltY = tilt_y;
 
-        // dbg!(pen_mask & );
-
         self.last_pressure = pressure;
 
         unsafe {
