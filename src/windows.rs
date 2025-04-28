@@ -228,7 +228,7 @@ impl PlatformImpl {
         Ok(())
     }
 
-    pub fn touch_down(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
+    pub(crate) fn touch_down(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
         self.touches[slot as usize] = (x, y);
 
         let mut input: Controls::POINTER_TYPE_INFO = unsafe { std::mem::zeroed() };
@@ -252,7 +252,7 @@ impl PlatformImpl {
         Ok(())
     }
 
-    pub fn touch_up(&mut self, slot: i32) -> Result<(), SimulationError> {
+    pub(crate) fn touch_up(&mut self, slot: i32) -> Result<(), SimulationError> {
         let (x, y) = self.touches[slot as usize];
 
         let mut input: Controls::POINTER_TYPE_INFO = unsafe { std::mem::zeroed() };
@@ -274,7 +274,7 @@ impl PlatformImpl {
         Ok(())
     }
 
-    pub fn touch_move(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
+    pub(crate) fn touch_move(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
         self.touches[slot as usize] = (x, y);
 
         let mut input: Controls::POINTER_TYPE_INFO = unsafe { std::mem::zeroed() };
@@ -298,7 +298,7 @@ impl PlatformImpl {
         Ok(())
     }
 
-    pub fn pen(
+    pub(crate) fn pen(
         &mut self,
         x: i32,
         y: i32,
