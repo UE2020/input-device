@@ -308,7 +308,7 @@ impl PlatformImpl {
         tilt_x: i32,
         tilt_y: i32,
     ) -> Result<(), SimulationError> {
-        let pen_mask = if pressure == 0.0 {
+        let flags = if pressure == 0.0 {
             Pointer::POINTER_FLAG_UP
         } else if self.last_pressure == 0.0 {
             Pointer::POINTER_FLAG_DOWN
@@ -323,7 +323,7 @@ impl PlatformImpl {
         let mut input: Controls::POINTER_TYPE_INFO = unsafe { std::mem::zeroed() };
         input.r#type = WindowsAndMessaging::PT_PEN;
         input.Anonymous.penInfo.pointerInfo.pointerType = WindowsAndMessaging::PT_PEN;
-        input.Anonymous.penInfo.pointerInfo.pointerFlags = pen_mask;
+        input.Anonymous.penInfo.pointerInfo.pointerFlags = flags;
         input.Anonymous.penInfo.penMask = WindowsAndMessaging::PEN_MASK_PRESSURE
             | WindowsAndMessaging::PEN_MASK_TILT_X
             | WindowsAndMessaging::PEN_MASK_TILT_Y;
