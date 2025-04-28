@@ -1,5 +1,6 @@
 use crate::Key;
 use thiserror::Error;
+use windows::Win32::UI::Controls;
 use windows::Win32::UI::Input::KeyboardAndMouse;
 use windows::Win32::UI::Input::Pointer;
 use windows::Win32::UI::WindowsAndMessaging;
@@ -11,15 +12,28 @@ pub enum SimulationError {
 }
 
 pub(crate) struct PlatformImpl {
+    touch_device: Controls::HSYNTHETICPOINTERDEVICE,
+    pen_device: Controls::HSYNTHETICPOINTERDEVICE,
     touches: [(i32, i32); 10],
 }
 
 impl PlatformImpl {
     pub(crate) fn new() -> Result<Self, SimulationError> {
-        unsafe {
-            Pointer::InitializeTouchInjection(10, Pointer::TOUCH_FEEDBACK_DEFAULT)?;
-        }
         Ok(Self {
+            touch_device: unsafe {
+                Controls::CreateSyntheticPointerDevice(
+                    WindowsAndMessaging::PT_TOUCH,
+                    10,
+                    Controls::POINTER_FEEDBACK_DEFAULT,
+                )?
+            },
+            pen_device: unsafe {
+                Controls::CreateSyntheticPointerDevice(
+                    WindowsAndMessaging::PT_PEN,
+                    1,
+                    Controls::POINTER_FEEDBACK_DEFAULT,
+                )?
+            },
             touches: [(0, 0); 10],
         })
     }
@@ -215,22 +229,23 @@ impl PlatformImpl {
     pub fn touch_down(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
         self.touches[slot as usize] = (x, y);
 
-        let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
-        touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
-        touch_info.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_DOWN
+        let mut input: Controls::POINTER_TYPE_INFO = unsafe { std::mem::zeroed() };
+        input.r#type = WindowsAndMessaging::PT_TOUCH;
+        input.Anonymous.touchInfo.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
+        input.Anonymous.touchInfo.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_DOWN
             | Pointer::POINTER_FLAG_INRANGE
             | Pointer::POINTER_FLAG_INCONTACT;
-        touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
-        touch_info.pointerInfo.pointerId = slot as u32;
-        touch_info.pointerInfo.ptPixelLocation.x = x;
-        touch_info.pointerInfo.ptPixelLocation.y = y;
-        touch_info.rcContact.top = y - 2;
-        touch_info.rcContact.bottom = y + 2;
-        touch_info.rcContact.left = x - 2;
-        touch_info.rcContact.right = x + 2;
+        input.Anonymous.touchInfo.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
+        input.Anonymous.touchInfo.pointerInfo.pointerId = slot as u32;
+        input.Anonymous.touchInfo.pointerInfo.ptPixelLocation.x = x;
+        input.Anonymous.touchInfo.pointerInfo.ptPixelLocation.y = y;
+        input.Anonymous.touchInfo.rcContact.top = y - 2;
+        input.Anonymous.touchInfo.rcContact.bottom = y + 2;
+        input.Anonymous.touchInfo.rcContact.left = x - 2;
+        input.Anonymous.touchInfo.rcContact.right = x + 2;
 
         unsafe {
-            Pointer::InjectTouchInput(&[touch_info])?;
+            Pointer::InjectSyntheticPointerInput(self.touch_device, &[input])?;
         }
         Ok(())
     }
@@ -238,20 +253,21 @@ impl PlatformImpl {
     pub fn touch_up(&mut self, slot: i32) -> Result<(), SimulationError> {
         let (x, y) = self.touches[slot as usize];
 
-        let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
-        touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
-        touch_info.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_UP;
-        touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
-        touch_info.pointerInfo.pointerId = slot as u32;
-        touch_info.pointerInfo.ptPixelLocation.x = x;
-        touch_info.pointerInfo.ptPixelLocation.y = y;
-        touch_info.rcContact.top = y - 2;
-        touch_info.rcContact.bottom = y + 2;
-        touch_info.rcContact.left = x - 2;
-        touch_info.rcContact.right = x + 2;
+        let mut input: Controls::POINTER_TYPE_INFO = unsafe { std::mem::zeroed() };
+        input.r#type = WindowsAndMessaging::PT_TOUCH;
+        input.Anonymous.touchInfo.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
+        input.Anonymous.touchInfo.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_UP;
+        input.Anonymous.touchInfo.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
+        input.Anonymous.touchInfo.pointerInfo.pointerId = slot as u32;
+        input.Anonymous.touchInfo.pointerInfo.ptPixelLocation.x = x;
+        input.Anonymous.touchInfo.pointerInfo.ptPixelLocation.y = y;
+        input.Anonymous.touchInfo.rcContact.top = y - 2;
+        input.Anonymous.touchInfo.rcContact.bottom = y + 2;
+        input.Anonymous.touchInfo.rcContact.left = x - 2;
+        input.Anonymous.touchInfo.rcContact.right = x + 2;
 
         unsafe {
-            Pointer::InjectTouchInput(&[touch_info])?;
+            Pointer::InjectSyntheticPointerInput(self.touch_device, &[input])?;
         }
         Ok(())
     }
@@ -259,22 +275,23 @@ impl PlatformImpl {
     pub fn touch_move(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
         self.touches[slot as usize] = (x, y);
 
-        let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
-        touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
-        touch_info.pointerInfo.pointerId = slot as u32;
-        touch_info.pointerInfo.ptPixelLocation.x = x;
-        touch_info.pointerInfo.ptPixelLocation.y = y;
-        touch_info.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_UPDATE
+        let mut input: Controls::POINTER_TYPE_INFO = unsafe { std::mem::zeroed() };
+        input.r#type = WindowsAndMessaging::PT_TOUCH;
+        input.Anonymous.touchInfo.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
+        input.Anonymous.touchInfo.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_UPDATE
             | Pointer::POINTER_FLAG_INRANGE
             | Pointer::POINTER_FLAG_INCONTACT;
-        touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
-        touch_info.rcContact.top = y - 2;
-        touch_info.rcContact.bottom = y + 2;
-        touch_info.rcContact.left = x - 2;
-        touch_info.rcContact.right = x + 2;
+        input.Anonymous.touchInfo.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
+        input.Anonymous.touchInfo.pointerInfo.pointerId = slot as u32;
+        input.Anonymous.touchInfo.pointerInfo.ptPixelLocation.x = x;
+        input.Anonymous.touchInfo.pointerInfo.ptPixelLocation.y = y;
+        input.Anonymous.touchInfo.rcContact.top = y - 2;
+        input.Anonymous.touchInfo.rcContact.bottom = y + 2;
+        input.Anonymous.touchInfo.rcContact.left = x - 2;
+        input.Anonymous.touchInfo.rcContact.right = x + 2;
 
         unsafe {
-            Pointer::InjectTouchInput(&[touch_info])?;
+            Pointer::InjectSyntheticPointerInput(self.touch_device, &[input])?;
         }
         Ok(())
     }
