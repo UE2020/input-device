@@ -16,7 +16,7 @@ pub fn main() -> Result<(), SimulationError> {
     }
     println!("Testing scroll");
     for _ in 0..30 {
-        sim.wheel(10, 0)?;
+        sim.wheel(0, 200)?;
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     println!("Testing click");
