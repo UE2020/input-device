@@ -15,6 +15,7 @@ pub(crate) struct PlatformImpl {
     touch_device: Controls::HSYNTHETICPOINTERDEVICE,
     pen_device: Controls::HSYNTHETICPOINTERDEVICE,
     touches: [(i32, i32); 10],
+    last_pressure: f64,
 }
 
 impl PlatformImpl {
@@ -35,6 +36,7 @@ impl PlatformImpl {
                 )?
             },
             touches: [(0, 0); 10],
+            last_pressure: 0.,
         })
     }
 
@@ -292,6 +294,49 @@ impl PlatformImpl {
 
         unsafe {
             Pointer::InjectSyntheticPointerInput(self.touch_device, &[input])?;
+        }
+        Ok(())
+    }
+
+    pub fn pen(
+        &mut self,
+        x: i32,
+        y: i32,
+        pressure: f64,
+        tilt_x: i32,
+        tilt_y: i32,
+    ) -> Result<(), SimulationError> {
+        let pen_mask = if pressure == 0. {
+            Pointer::POINTER_FLAG_UP
+        } else if self.last_pressure == 0. {
+            Pointer::POINTER_FLAG_DOWN
+                | Pointer::POINTER_FLAG_INRANGE
+                | Pointer::POINTER_FLAG_INCONTACT
+        } else {
+            Pointer::POINTER_FLAG_UPDATE
+                | Pointer::POINTER_FLAG_INRANGE
+                | Pointer::POINTER_FLAG_INCONTACT
+        };
+
+        let mut input: Controls::POINTER_TYPE_INFO = unsafe { std::mem::zeroed() };
+        input.r#type = WindowsAndMessaging::PT_PEN;
+        input.Anonymous.penInfo.pointerInfo.pointerType = WindowsAndMessaging::PT_PEN;
+        input.Anonymous.penInfo.pointerInfo.pointerFlags = pen_mask;
+        input.Anonymous.penInfo.penMask = WindowsAndMessaging::PEN_MASK_PRESSURE
+            | WindowsAndMessaging::PEN_MASK_TILT_X
+            | WindowsAndMessaging::PEN_MASK_TILT_Y;
+        input.Anonymous.penInfo.pointerInfo.ptPixelLocation.x = x;
+        input.Anonymous.penInfo.pointerInfo.ptPixelLocation.y = y;
+        input.Anonymous.penInfo.pressure = (pressure * 1024.) as u32;
+        input.Anonymous.penInfo.tiltX = tilt_x;
+        input.Anonymous.penInfo.tiltY = tilt_y;
+
+        // dbg!(pen_mask & );
+
+        self.last_pressure = pressure;
+
+        unsafe {
+            Pointer::InjectSyntheticPointerInput(self.pen_device, &[input])?;
         }
         Ok(())
     }
