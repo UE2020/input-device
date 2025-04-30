@@ -225,8 +225,11 @@ impl PlatformImpl {
         input.Anonymous.ki.dwFlags =
             KeyboardAndMouse::KEYEVENTF_KEYUP | KeyboardAndMouse::KEYEVENTF_SCANCODE;
         input.Anonymous.ki.wScan = key.into();
-
         unsafe {
+            if input.Anonymous.ki.wScan & 0xE000 == 0xE000 {
+                input.Anonymous.ki.dwFlags |= KeyboardAndMouse::KEYEVENTF_EXTENDEDKEY;
+            }
+
             KeyboardAndMouse::SendInput(
                 &[input],
                 std::mem::size_of::<KeyboardAndMouse::INPUT>() as i32,
@@ -458,15 +461,15 @@ impl From<Key> for u16 {
             Key::KpSlash => 0x62,
             Key::SysRq => 0x63,
             Key::RightAlt => 0x64,
-            Key::Home => 0xE0,
-            Key::Up => 0xE1,
-            Key::PageUp => 0xE2,
-            Key::Left => 0xE3,
-            Key::Right => 0xE4,
-            Key::End => 0xE5,
-            Key::Down => 0xE6,
-            Key::PageDown => 0xE7,
-            Key::Insert => 0xE8,
+            Key::Home => 0xE047,
+            Key::Up => 0xE048,
+            Key::PageUp => 0xE049,
+            Key::Left => 0xE04B,
+            Key::Right => 0xE04D,
+            Key::End => 0xE04F,
+            Key::Down => 0xE050,
+            Key::PageDown => 0xE051,
+            Key::Insert => 0xE052,
             Key::Delete => 0xE9,
             Key::Macro => 0xEA,
             Key::Mute => 0xEB,
