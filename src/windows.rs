@@ -21,7 +21,9 @@ pub(crate) struct PlatformImpl {
 
 impl PlatformImpl {
     pub(crate) fn new() -> Result<Self, SimulationError> {
-        unsafe { HiDpi::SetProcessDpiAwareness(HiDpi::PROCESS_PER_MONITOR_DPI_AWARE)?; }
+        unsafe {
+            HiDpi::SetProcessDpiAwareness(HiDpi::PROCESS_PER_MONITOR_DPI_AWARE)?;
+        }
         Ok(Self {
             touch_device: unsafe {
                 Controls::CreateSyntheticPointerDevice(
@@ -202,8 +204,11 @@ impl PlatformImpl {
         };
         input.Anonymous.ki.dwFlags = KeyboardAndMouse::KEYEVENTF_SCANCODE;
         input.Anonymous.ki.wScan = key.into();
-
         unsafe {
+            if input.Anonymous.ki.wScan & 0xE000 == 0xE000 {
+                input.Anonymous.ki.dwFlags |= KeyboardAndMouse::KEYEVENTF_EXTENDEDKEY;
+            }
+
             KeyboardAndMouse::SendInput(
                 &[input],
                 std::mem::size_of::<KeyboardAndMouse::INPUT>() as i32,
@@ -475,8 +480,8 @@ impl From<Key> for u16 {
             Key::Hanguel => 0xF3,
             Key::Hanja => 0xF4,
             Key::Yen => 0xF5,
-            Key::LeftMeta => 0x5B,
-            Key::RightMeta => 0x5C,
+            Key::LeftMeta => 0xE05B,
+            Key::RightMeta => 0xE05C,
             Key::Compose => 0xF8,
             Key::Stop => 0xF9,
             Key::Help => 0xFA,
