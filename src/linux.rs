@@ -24,7 +24,6 @@ pub enum SimulationError {
 
 pub(crate) struct PlatformImpl {
     conn: RustConnection,
-    abs_mouse_device: VirtualDevice,
     rel_mouse_device: VirtualDevice,
     keyboard_device: VirtualDevice,
     touch_device: VirtualDevice,
@@ -69,24 +68,6 @@ impl PlatformImpl {
         for path in rel_mouse_device.enumerate_dev_nodes_blocking()? {
             let path = path?;
             info!("Relative mouse device available as {}", path.display());
-        }
-
-        let mut abs_mouse_device = VirtualDevice::builder()?
-            .name("Simulated input-device Absolute Mouse")
-            .with_keys(&AttributeSet::from_iter([KeyCode::BTN_LEFT]))?
-            .with_absolute_axis(&UinputAbsSetup::new(
-                AbsoluteAxisCode::ABS_X,
-                AbsInfo::new(0, 0, 100_000, 0, 0, 0),
-            ))?
-            .with_absolute_axis(&UinputAbsSetup::new(
-                AbsoluteAxisCode::ABS_Y,
-                AbsInfo::new(0, 0, 100_000, 0, 0, 0),
-            ))?
-            .build()?;
-
-        for path in abs_mouse_device.enumerate_dev_nodes_blocking()? {
-            let path = path?;
-            info!("Absolute mouse device available as {}", path.display());
         }
 
         let mut touch_device = VirtualDevice::builder()?
@@ -154,7 +135,6 @@ impl PlatformImpl {
             wheel_y: 0,
             last_pressure: 0.0,
             rel_mouse_device,
-            abs_mouse_device,
             keyboard_device,
             touch_device,
             pen_device,
