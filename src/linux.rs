@@ -163,15 +163,8 @@ impl PlatformImpl {
     }
 
     pub(crate) fn move_mouse_abs(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
-        let (width, height) = self.get_screen_size()?;
-        let (x, y) = (
-            (x as f64 / width as f64 * 100_000.0).round() as i32,
-            (y as f64 / height as f64 * 100_000.0).round() as i32,
-        );
-        self.abs_mouse_device.emit(&[
-            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_X.0, x),
-            InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_Y.0, y),
-        ])?;
+        let root_window = self.conn.setup().roots[0].root;
+        self.conn.warp_pointer(x11rb::NONE, root_window, 0, 0, 0, 0, x as i16, y as i16)?;
         Ok(())
     }
 
