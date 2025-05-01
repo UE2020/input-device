@@ -145,6 +145,7 @@ impl PlatformImpl {
     pub(crate) fn move_mouse_abs(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
         let root_window = self.conn.setup().roots[0].root;
         self.conn.warp_pointer(x11rb::NONE, root_window, 0, 0, 0, 0, x as i16, y as i16)?;
+        self.conn.flush()?;
         Ok(())
     }
 
