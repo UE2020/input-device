@@ -1,6 +1,7 @@
 use crate::Key;
 use thiserror::Error;
 use windows::Win32::UI::Controls;
+use windows::Win32::UI::HiDpi;
 use windows::Win32::UI::Input::KeyboardAndMouse;
 use windows::Win32::UI::Input::Pointer;
 use windows::Win32::UI::WindowsAndMessaging;
@@ -20,6 +21,9 @@ pub(crate) struct PlatformImpl {
 
 impl PlatformImpl {
     pub(crate) fn new() -> Result<Self, SimulationError> {
+        unsafe {
+            HiDpi::SetProcessDpiAwareness(HiDpi::PROCESS_PER_MONITOR_DPI_AWARE)?;
+        }
         Ok(Self {
             touch_device: unsafe {
                 Controls::CreateSyntheticPointerDevice(
@@ -36,7 +40,7 @@ impl PlatformImpl {
                 )?
             },
             touches: [(0, 0); 10],
-            last_pressure: 0.,
+            last_pressure: 0.0,
         })
     }
 
@@ -200,8 +204,11 @@ impl PlatformImpl {
         };
         input.Anonymous.ki.dwFlags = KeyboardAndMouse::KEYEVENTF_SCANCODE;
         input.Anonymous.ki.wScan = key.into();
-
         unsafe {
+            if input.Anonymous.ki.wScan & 0xE000 == 0xE000 {
+                input.Anonymous.ki.dwFlags |= KeyboardAndMouse::KEYEVENTF_EXTENDEDKEY;
+            }
+
             KeyboardAndMouse::SendInput(
                 &[input],
                 std::mem::size_of::<KeyboardAndMouse::INPUT>() as i32,
@@ -218,8 +225,11 @@ impl PlatformImpl {
         input.Anonymous.ki.dwFlags =
             KeyboardAndMouse::KEYEVENTF_KEYUP | KeyboardAndMouse::KEYEVENTF_SCANCODE;
         input.Anonymous.ki.wScan = key.into();
-
         unsafe {
+            if input.Anonymous.ki.wScan & 0xE000 == 0xE000 {
+                input.Anonymous.ki.dwFlags |= KeyboardAndMouse::KEYEVENTF_EXTENDEDKEY;
+            }
+
             KeyboardAndMouse::SendInput(
                 &[input],
                 std::mem::size_of::<KeyboardAndMouse::INPUT>() as i32,
@@ -306,9 +316,9 @@ impl PlatformImpl {
         tilt_x: i32,
         tilt_y: i32,
     ) -> Result<(), SimulationError> {
-        let pen_mask = if pressure == 0. {
+        let flags = if pressure == 0.0 {
             Pointer::POINTER_FLAG_UP
-        } else if self.last_pressure == 0. {
+        } else if self.last_pressure == 0.0 {
             Pointer::POINTER_FLAG_DOWN
                 | Pointer::POINTER_FLAG_INRANGE
                 | Pointer::POINTER_FLAG_INCONTACT
@@ -321,13 +331,13 @@ impl PlatformImpl {
         let mut input: Controls::POINTER_TYPE_INFO = unsafe { std::mem::zeroed() };
         input.r#type = WindowsAndMessaging::PT_PEN;
         input.Anonymous.penInfo.pointerInfo.pointerType = WindowsAndMessaging::PT_PEN;
-        input.Anonymous.penInfo.pointerInfo.pointerFlags = pen_mask;
+        input.Anonymous.penInfo.pointerInfo.pointerFlags = flags;
         input.Anonymous.penInfo.penMask = WindowsAndMessaging::PEN_MASK_PRESSURE
             | WindowsAndMessaging::PEN_MASK_TILT_X
             | WindowsAndMessaging::PEN_MASK_TILT_Y;
         input.Anonymous.penInfo.pointerInfo.ptPixelLocation.x = x;
         input.Anonymous.penInfo.pointerInfo.ptPixelLocation.y = y;
-        input.Anonymous.penInfo.pressure = (pressure * 1024.) as u32;
+        input.Anonymous.penInfo.pressure = (pressure * 1024.0) as u32;
         input.Anonymous.penInfo.tiltX = tilt_x;
         input.Anonymous.penInfo.tiltY = tilt_y;
 
@@ -337,6 +347,15 @@ impl PlatformImpl {
             Pointer::InjectSyntheticPointerInput(self.pen_device, &[input])?;
         }
         Ok(())
+    }
+}
+
+impl Drop for PlatformImpl {
+    fn drop(&mut self) {
+        unsafe {
+            Controls::DestroySyntheticPointerDevice(self.touch_device);
+            Controls::DestroySyntheticPointerDevice(self.pen_device);
+        }
     }
 }
 
@@ -442,15 +461,15 @@ impl From<Key> for u16 {
             Key::KpSlash => 0x62,
             Key::SysRq => 0x63,
             Key::RightAlt => 0x64,
-            Key::Home => 0xE0,
-            Key::Up => 0xE1,
-            Key::PageUp => 0xE2,
-            Key::Left => 0xE3,
-            Key::Right => 0xE4,
-            Key::End => 0xE5,
-            Key::Down => 0xE6,
-            Key::PageDown => 0xE7,
-            Key::Insert => 0xE8,
+            Key::Home => 0xE047,
+            Key::Up => 0xE048,
+            Key::PageUp => 0xE049,
+            Key::Left => 0xE04B,
+            Key::Right => 0xE04D,
+            Key::End => 0xE04F,
+            Key::Down => 0xE050,
+            Key::PageDown => 0xE051,
+            Key::Insert => 0xE052,
             Key::Delete => 0xE9,
             Key::Macro => 0xEA,
             Key::Mute => 0xEB,
@@ -464,8 +483,8 @@ impl From<Key> for u16 {
             Key::Hanguel => 0xF3,
             Key::Hanja => 0xF4,
             Key::Yen => 0xF5,
-            Key::LeftMeta => 0xF6,
-            Key::RightMeta => 0xF7,
+            Key::LeftMeta => 0xE05B,
+            Key::RightMeta => 0xE05C,
             Key::Compose => 0xF8,
             Key::Stop => 0xF9,
             Key::Help => 0xFA,
