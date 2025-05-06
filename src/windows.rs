@@ -45,7 +45,21 @@ impl PlatformImpl {
     }
 
     pub(crate) fn move_mouse_abs(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
-        Ok(unsafe { WindowsAndMessaging::SetCursorPos(x, y)? })
+        let mut input = KeyboardAndMouse::INPUT {
+            r#type: KeyboardAndMouse::INPUT_MOUSE,
+            Anonymous: unsafe { std::mem::zeroed() },
+        };
+        input.Anonymous.mi.dx = x;
+        input.Anonymous.mi.dy = y;
+        input.Anonymous.mi.dwFlags = KeyboardAndMouse::MOUSEEVENTF_MOVE | KeyboardAndMouse::MOUSEEVENTF_ABSOLUTE;
+
+        unsafe {
+            KeyboardAndMouse::SendInput(
+                &[input],
+                std::mem::size_of::<KeyboardAndMouse::INPUT>() as i32,
+            );
+        }
+        Ok(())
     }
 
     pub(crate) fn move_mouse_rel(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
