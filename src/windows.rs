@@ -52,7 +52,8 @@ impl PlatformImpl {
         let (w, h) = self.get_screen_size()?;
         input.Anonymous.mi.dx = (x * 65535) / w;
         input.Anonymous.mi.dy = (y * 65535) / h;
-        input.Anonymous.mi.dwFlags = KeyboardAndMouse::MOUSEEVENTF_MOVE | KeyboardAndMouse::MOUSEEVENTF_ABSOLUTE;
+        input.Anonymous.mi.dwFlags =
+            KeyboardAndMouse::MOUSEEVENTF_MOVE | KeyboardAndMouse::MOUSEEVENTF_ABSOLUTE;
 
         unsafe {
             KeyboardAndMouse::SendInput(
@@ -199,17 +200,6 @@ impl PlatformImpl {
             );
         }
         Ok(())
-    }
-
-    pub(crate) fn get_screen_size(&self) -> Result<(i32, i32), SimulationError> {
-        Ok((
-            unsafe {
-                WindowsAndMessaging::GetSystemMetrics(WindowsAndMessaging::SM_CXVIRTUALSCREEN)
-            },
-            unsafe {
-                WindowsAndMessaging::GetSystemMetrics(WindowsAndMessaging::SM_CYVIRTUALSCREEN)
-            },
-        ))
     }
 
     pub(crate) fn key_down(&mut self, key: Key) -> Result<(), SimulationError> {
@@ -362,6 +352,17 @@ impl PlatformImpl {
             Pointer::InjectSyntheticPointerInput(self.pen_device, &[input])?;
         }
         Ok(())
+    }
+
+    pub(crate) fn get_screen_size(&self) -> Result<(i32, i32), SimulationError> {
+        Ok((
+            unsafe {
+                WindowsAndMessaging::GetSystemMetrics(WindowsAndMessaging::SM_CXVIRTUALSCREEN)
+            },
+            unsafe {
+                WindowsAndMessaging::GetSystemMetrics(WindowsAndMessaging::SM_CYVIRTUALSCREEN)
+            },
+        ))
     }
 }
 
