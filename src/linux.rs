@@ -98,7 +98,7 @@ impl PlatformImpl {
         }
 
         let mut pen_device = VirtualDevice::builder()?
-            .name("Simulated input-device Pen Device")
+            .name("Simulated input-device Pen")
             .with_absolute_axis(&UinputAbsSetup::new(
                 AbsoluteAxisCode::ABS_X,
                 AbsInfo::new(0, 0, 100_000, 0, 0, 0),
