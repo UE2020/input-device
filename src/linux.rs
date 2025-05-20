@@ -7,6 +7,7 @@ use log::info;
 use strum::IntoEnumIterator;
 use thiserror::Error;
 use x11rb::protocol::xproto::ConnectionExt;
+use x11rb::protocol::xtest::ConnectionExt as XtestConnectionExt;
 use x11rb::{connection::Connection, rust_connection::RustConnection};
 
 /// An error returned by the [InputSimulator](crate::InputSimulator).
@@ -97,7 +98,7 @@ impl PlatformImpl {
         }
 
         let mut pen_device = VirtualDevice::builder()?
-            .name("Simulated input-device Pen Device")
+            .name("Simulated input-device Pen")
             .with_absolute_axis(&UinputAbsSetup::new(
                 AbsoluteAxisCode::ABS_X,
                 AbsInfo::new(0, 0, 100_000, 0, 0, 0),
@@ -162,50 +163,38 @@ impl PlatformImpl {
     }
 
     pub(crate) fn left_mouse_down(&mut self) -> Result<(), SimulationError> {
-        self.rel_mouse_device
-            .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_LEFT.0, 1)])?;
+        self.conn.xtest_fake_input(4, 1, 0, x11rb::NONE, 0, 0, 0)?;
+        self.conn.flush()?;
         Ok(())
     }
 
     pub(crate) fn middle_mouse_down(&mut self) -> Result<(), SimulationError> {
-        self.rel_mouse_device.emit(&[InputEvent::new(
-            EventType::KEY.0,
-            KeyCode::BTN_MIDDLE.0,
-            1,
-        )])?;
+        self.conn.xtest_fake_input(4, 2, 0, x11rb::NONE, 0, 0, 0)?;
+        self.conn.flush()?;
         Ok(())
     }
 
     pub(crate) fn right_mouse_down(&mut self) -> Result<(), SimulationError> {
-        self.rel_mouse_device.emit(&[InputEvent::new(
-            EventType::KEY.0,
-            KeyCode::BTN_RIGHT.0,
-            1,
-        )])?;
+        self.conn.xtest_fake_input(4, 3, 0, x11rb::NONE, 0, 0, 0)?;
+        self.conn.flush()?;
         Ok(())
     }
 
     pub(crate) fn left_mouse_up(&mut self) -> Result<(), SimulationError> {
-        self.rel_mouse_device
-            .emit(&[InputEvent::new(EventType::KEY.0, KeyCode::BTN_LEFT.0, 0)])?;
+        self.conn.xtest_fake_input(5, 1, 0, x11rb::NONE, 0, 0, 0)?;
+        self.conn.flush()?;
         Ok(())
     }
 
     pub(crate) fn middle_mouse_up(&mut self) -> Result<(), SimulationError> {
-        self.rel_mouse_device.emit(&[InputEvent::new(
-            EventType::KEY.0,
-            KeyCode::BTN_MIDDLE.0,
-            0,
-        )])?;
+        self.conn.xtest_fake_input(5, 2, 0, x11rb::NONE, 0, 0, 0)?;
+        self.conn.flush()?;
         Ok(())
     }
 
     pub(crate) fn right_mouse_up(&mut self) -> Result<(), SimulationError> {
-        self.rel_mouse_device.emit(&[InputEvent::new(
-            EventType::KEY.0,
-            KeyCode::BTN_RIGHT.0,
-            0,
-        )])?;
+        self.conn.xtest_fake_input(5, 3, 0, x11rb::NONE, 0, 0, 0)?;
+        self.conn.flush()?;
         Ok(())
     }
 

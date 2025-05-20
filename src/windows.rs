@@ -202,17 +202,6 @@ impl PlatformImpl {
         Ok(())
     }
 
-    pub(crate) fn get_screen_size(&self) -> Result<(i32, i32), SimulationError> {
-        Ok((
-            unsafe {
-                WindowsAndMessaging::GetSystemMetrics(WindowsAndMessaging::SM_CXVIRTUALSCREEN)
-            },
-            unsafe {
-                WindowsAndMessaging::GetSystemMetrics(WindowsAndMessaging::SM_CYVIRTUALSCREEN)
-            },
-        ))
-    }
-
     pub(crate) fn key_down(&mut self, key: Key) -> Result<(), SimulationError> {
         let mut input = KeyboardAndMouse::INPUT {
             r#type: KeyboardAndMouse::INPUT_KEYBOARD,
@@ -363,6 +352,17 @@ impl PlatformImpl {
             Pointer::InjectSyntheticPointerInput(self.pen_device, &[input])?;
         }
         Ok(())
+    }
+
+    pub(crate) fn get_screen_size(&self) -> Result<(i32, i32), SimulationError> {
+        Ok((
+            unsafe {
+                WindowsAndMessaging::GetSystemMetrics(WindowsAndMessaging::SM_CXVIRTUALSCREEN)
+            },
+            unsafe {
+                WindowsAndMessaging::GetSystemMetrics(WindowsAndMessaging::SM_CYVIRTUALSCREEN)
+            },
+        ))
     }
 }
 
