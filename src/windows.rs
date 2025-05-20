@@ -267,8 +267,7 @@ impl PlatformImpl {
         touch_info.rcContact.left = x - 2;
         touch_info.rcContact.right = x + 2;
 
-        let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = Vec::new();
-        touches.push(touch_info);
+        let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![touch_info];
         for (index, touch) in self.touches.iter().enumerate() {
             if !touch.active || index == slot as usize {
                 continue;
@@ -317,8 +316,7 @@ impl PlatformImpl {
         touch_info.rcContact.left = x - 2;
         touch_info.rcContact.right = x + 2;
 
-        let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = Vec::new();
-        touches.push(touch_info);
+        let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![touch_info];
         for (index, touch) in self.touches.iter().enumerate() {
             if !touch.active || index == slot as usize {
                 continue;
@@ -367,8 +365,7 @@ impl PlatformImpl {
         touch_info.rcContact.left = x - 2;
         touch_info.rcContact.right = x + 2;
 
-        let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = Vec::new();
-        touches.push(touch_info);
+        let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![touch_info];
         for (index, touch) in self.touches.iter().enumerate() {
             if !touch.active || index == slot as usize {
                 continue;
