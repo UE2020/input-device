@@ -1,4 +1,5 @@
 use crate::Key;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 use windows::Win32::UI::Controls;
 use windows::Win32::UI::HiDpi;
@@ -19,9 +20,32 @@ struct Touch {
     active: bool,
 }
 
+impl Touch {
+    fn into_touchinfo(
+        self,
+        flags: Pointer::POINTER_FLAGS,
+        time: u32,
+        index: u32,
+    ) -> Pointer::POINTER_TOUCH_INFO {
+        let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
+        touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
+        touch_info.pointerInfo.pointerId = index;
+        touch_info.pointerInfo.dwTime = time;
+        touch_info.pointerInfo.ptPixelLocation.x = self.x;
+        touch_info.pointerInfo.ptPixelLocation.y = self.y;
+        touch_info.pointerInfo.pointerFlags = flags;
+        touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
+        touch_info.rcContact.top = self.y - 2;
+        touch_info.rcContact.bottom = self.y + 2;
+        touch_info.rcContact.left = self.x - 2;
+        touch_info.rcContact.right = self.x + 2;
+        touch_info
+    }
+}
+
 pub(crate) struct PlatformImpl {
     pen_device: Controls::HSYNTHETICPOINTERDEVICE,
-    touches: [Touch; 10],
+    touches: Arc<Mutex<[Touch; 10]>>,
     last_pressure: f64,
 }
 
@@ -31,6 +55,48 @@ impl PlatformImpl {
             HiDpi::SetProcessDpiAwareness(HiDpi::PROCESS_PER_MONITOR_DPI_AWARE)?;
             Pointer::InitializeTouchInjection(10, Pointer::TOUCH_FEEDBACK_DEFAULT)?;
         }
+
+        let touches = Arc::new(Mutex::new(
+            [Touch {
+                x: 0,
+                y: 0,
+                active: false,
+            }; 10],
+        ));
+        let touches_clone = Arc::downgrade(&touches);
+
+        std::thread::spawn(move || loop {
+            match touches_clone.upgrade() {
+                Some(stored_touches) => {
+                    let stored_touches = stored_touches.lock().unwrap();
+                    let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![];
+                    let time = unsafe { WindowsAndMessaging::GetMessageTime() } as u32;
+                    for (index, touch) in stored_touches.iter().enumerate() {
+                        if !touch.active {
+                            continue;
+                        }
+
+                        let touch_info = touch.into_touchinfo(
+                            Pointer::POINTER_FLAG_UPDATE
+                                | Pointer::POINTER_FLAG_INRANGE
+                                | Pointer::POINTER_FLAG_INCONTACT,
+                            time,
+                            index as u32,
+                        );
+                        touches.push(touch_info);
+                    }
+                    if !touches.is_empty() {
+                        unsafe {
+                            Pointer::InjectTouchInput(&touches).expect("All touches are valid");
+                        }
+                    }
+                    std::mem::drop(stored_touches);
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                None => break,
+            }
+        });
+
         Ok(Self {
             pen_device: unsafe {
                 Controls::CreateSyntheticPointerDevice(
@@ -39,11 +105,7 @@ impl PlatformImpl {
                     Controls::POINTER_FEEDBACK_DEFAULT,
                 )?
             },
-            touches: [Touch {
-                x: 0,
-                y: 0,
-                active: false,
-            }; 10],
+            touches,
             last_pressure: 0.0,
         })
     }
@@ -248,45 +310,33 @@ impl PlatformImpl {
     }
 
     pub fn touch_down(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
-        self.touches[slot as usize] = Touch { x, y, active: true };
+        let mut stored_touches = self.touches.lock().unwrap();
+        stored_touches[slot as usize] = Touch { x, y, active: true };
 
         let time = unsafe { WindowsAndMessaging::GetMessageTime() } as u32;
 
-        let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
-        touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
-        touch_info.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_DOWN
+        let touch_info = stored_touches[slot as usize].into_touchinfo(
+            Pointer::POINTER_FLAG_DOWN
             | Pointer::POINTER_FLAG_INRANGE
-            | Pointer::POINTER_FLAG_INCONTACT;
-        touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
-        touch_info.pointerInfo.pointerId = slot as u32;
-        touch_info.pointerInfo.dwTime = time;
-        touch_info.pointerInfo.ptPixelLocation.x = x;
-        touch_info.pointerInfo.ptPixelLocation.y = y;
-        touch_info.rcContact.top = y - 2;
-        touch_info.rcContact.bottom = y + 2;
-        touch_info.rcContact.left = x - 2;
-        touch_info.rcContact.right = x + 2;
+            | Pointer::POINTER_FLAG_INCONTACT,
+            time,
+            slot as u32,
+        );
 
         let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![touch_info];
-        for (index, touch) in self.touches.iter().enumerate() {
+        for (index, touch) in stored_touches.iter().enumerate() {
             if !touch.active || index == slot as usize {
                 continue;
             }
 
-            let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
-            touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
-            touch_info.pointerInfo.pointerId = index as u32;
-            touch_info.pointerInfo.dwTime = time;
-            touch_info.pointerInfo.ptPixelLocation.x = touch.x;
-            touch_info.pointerInfo.ptPixelLocation.y = touch.y;
-            touch_info.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_UPDATE
+            let touch_info = touch.into_touchinfo(
+                Pointer::POINTER_FLAG_UPDATE
                 | Pointer::POINTER_FLAG_INRANGE
-                | Pointer::POINTER_FLAG_INCONTACT;
-            touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
-            touch_info.rcContact.top = touch.y - 2;
-            touch_info.rcContact.bottom = touch.y + 2;
-            touch_info.rcContact.left = touch.x - 2;
-            touch_info.rcContact.right = touch.x + 2;
+                | Pointer::POINTER_FLAG_INCONTACT,
+                time,
+                index as u32,
+            );
+
             touches.push(touch_info);
         }
 
@@ -297,45 +347,30 @@ impl PlatformImpl {
     }
 
     pub fn touch_up(&mut self, slot: i32) -> Result<(), SimulationError> {
-        let x = self.touches[slot as usize].x;
-        let y = self.touches[slot as usize].y;
-        self.touches[slot as usize].active = false;
+        let mut stored_touches = self.touches.lock().unwrap();
+        stored_touches[slot as usize].active = false;
 
         let time = unsafe { WindowsAndMessaging::GetMessageTime() } as u32;
 
-        let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
-        touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
-        touch_info.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_UP;
-        touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
-        touch_info.pointerInfo.pointerId = slot as u32;
-        touch_info.pointerInfo.dwTime = time;
-        touch_info.pointerInfo.ptPixelLocation.x = x;
-        touch_info.pointerInfo.ptPixelLocation.y = y;
-        touch_info.rcContact.top = y - 2;
-        touch_info.rcContact.bottom = y + 2;
-        touch_info.rcContact.left = x - 2;
-        touch_info.rcContact.right = x + 2;
+        let touch_info = stored_touches[slot as usize].into_touchinfo(
+            Pointer::POINTER_FLAG_UP,
+            time,
+            slot as u32,
+        );
 
         let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![touch_info];
-        for (index, touch) in self.touches.iter().enumerate() {
+        for (index, touch) in stored_touches.iter().enumerate() {
             if !touch.active || index == slot as usize {
                 continue;
             }
 
-            let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
-            touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
-            touch_info.pointerInfo.pointerId = index as u32;
-            touch_info.pointerInfo.dwTime = time;
-            touch_info.pointerInfo.ptPixelLocation.x = touch.x;
-            touch_info.pointerInfo.ptPixelLocation.y = touch.y;
-            touch_info.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_UPDATE
+            let touch_info = touch.into_touchinfo(
+                Pointer::POINTER_FLAG_UPDATE
                 | Pointer::POINTER_FLAG_INRANGE
-                | Pointer::POINTER_FLAG_INCONTACT;
-            touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
-            touch_info.rcContact.top = touch.y - 2;
-            touch_info.rcContact.bottom = touch.y + 2;
-            touch_info.rcContact.left = touch.x - 2;
-            touch_info.rcContact.right = touch.x + 2;
+                | Pointer::POINTER_FLAG_INCONTACT,
+                time,
+                index as u32,
+            );
             touches.push(touch_info);
         }
 
@@ -346,45 +381,32 @@ impl PlatformImpl {
     }
 
     pub fn touch_move(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
-        self.touches[slot as usize] = Touch { x, y, active: true };
+        let mut stored_touches = self.touches.lock().unwrap();
+        stored_touches[slot as usize] = Touch { x, y, active: true };
 
         let time = unsafe { WindowsAndMessaging::GetMessageTime() } as u32;
 
-        let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
-        touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
-        touch_info.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_UPDATE
+        let touch_info = stored_touches[slot as usize].into_touchinfo(
+            Pointer::POINTER_FLAG_UPDATE
             | Pointer::POINTER_FLAG_INRANGE
-            | Pointer::POINTER_FLAG_INCONTACT;
-        touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
-        touch_info.pointerInfo.pointerId = slot as u32;
-        touch_info.pointerInfo.dwTime = time;
-        touch_info.pointerInfo.ptPixelLocation.x = x;
-        touch_info.pointerInfo.ptPixelLocation.y = y;
-        touch_info.rcContact.top = y - 2;
-        touch_info.rcContact.bottom = y + 2;
-        touch_info.rcContact.left = x - 2;
-        touch_info.rcContact.right = x + 2;
+            | Pointer::POINTER_FLAG_INCONTACT,
+            time,
+            slot as u32,
+        );
 
         let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![touch_info];
-        for (index, touch) in self.touches.iter().enumerate() {
+        for (index, touch) in stored_touches.iter().enumerate() {
             if !touch.active || index == slot as usize {
                 continue;
             }
 
-            let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
-            touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
-            touch_info.pointerInfo.pointerId = index as u32;
-            touch_info.pointerInfo.dwTime = time;
-            touch_info.pointerInfo.ptPixelLocation.x = touch.x;
-            touch_info.pointerInfo.ptPixelLocation.y = touch.y;
-            touch_info.pointerInfo.pointerFlags = Pointer::POINTER_FLAG_UPDATE
+            let touch_info = touch.into_touchinfo(
+                Pointer::POINTER_FLAG_UPDATE
                 | Pointer::POINTER_FLAG_INRANGE
-                | Pointer::POINTER_FLAG_INCONTACT;
-            touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
-            touch_info.rcContact.top = touch.y - 2;
-            touch_info.rcContact.bottom = touch.y + 2;
-            touch_info.rcContact.left = touch.x - 2;
-            touch_info.rcContact.right = touch.x + 2;
+                | Pointer::POINTER_FLAG_INCONTACT,
+                time,
+                index as u32,
+            );
             touches.push(touch_info);
         }
 
