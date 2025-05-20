@@ -18,7 +18,7 @@ fn has_permission() -> bool {
 pub enum SimulationError {
     #[error("Core graphics error")]
     CoreGraphicsError,
-    #[error("The application does not have the prerequisite accessibility permissions required to perform input simulation, these permissions must be explicitly granted in Settings")]
+    #[error("The application does not have the requisite accessibility permissions to perform input simulation")]
     PermissionError,
 }
 
@@ -202,7 +202,7 @@ impl PlatformImpl {
         if let Some(keycode) = key_to_cgkeycode(key) {
             let event = CGEvent::new_keyboard_event(self.source.clone(), keycode, true)
                 .map_err(|_| SimulationError::CoreGraphicsError)?;
-            event.post(CGEventTapLocation::Session);
+            event.post(CGEventTapLocation::HID);
         }
         Ok(())
     }
@@ -211,7 +211,7 @@ impl PlatformImpl {
         if let Some(keycode) = key_to_cgkeycode(key) {
             let event = CGEvent::new_keyboard_event(self.source.clone(), keycode, false)
                 .map_err(|_| SimulationError::CoreGraphicsError)?;
-            event.post(CGEventTapLocation::Session);
+            event.post(CGEventTapLocation::HID);
         }
         Ok(())
     }
