@@ -52,7 +52,8 @@ impl PlatformImpl {
         let (w, h) = self.get_screen_size()?;
         input.Anonymous.mi.dx = (x * 65535) / w;
         input.Anonymous.mi.dy = (y * 65535) / h;
-        input.Anonymous.mi.dwFlags = KeyboardAndMouse::MOUSEEVENTF_MOVE | KeyboardAndMouse::MOUSEEVENTF_ABSOLUTE;
+        input.Anonymous.mi.dwFlags =
+            KeyboardAndMouse::MOUSEEVENTF_MOVE | KeyboardAndMouse::MOUSEEVENTF_ABSOLUTE;
 
         unsafe {
             KeyboardAndMouse::SendInput(

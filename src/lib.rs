@@ -133,7 +133,14 @@ impl InputSimulator {
         self.0.touch_move(slot, x, y)
     }
 
-    pub fn pen(&mut self, x: i32, y: i32, pressure: f64, tilt_x: i32, tilt_y: i32) -> Result<(), SimulationError> {
+    pub fn pen(
+        &mut self,
+        x: i32,
+        y: i32,
+        pressure: f64,
+        tilt_x: i32,
+        tilt_y: i32,
+    ) -> Result<(), SimulationError> {
         self.0.pen(x, y, pressure, tilt_x, tilt_y)
     }
 

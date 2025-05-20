@@ -1,7 +1,7 @@
 use crate::Key;
 use evdev::{
-    AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent, KeyCode, PropType,
-    RelativeAxisCode, UinputAbsSetup, uinput::VirtualDevice,
+    uinput::VirtualDevice, AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent, KeyCode,
+    PropType, RelativeAxisCode, UinputAbsSetup,
 };
 use log::info;
 use strum::IntoEnumIterator;
@@ -30,7 +30,7 @@ pub(crate) struct PlatformImpl {
     pen_device: VirtualDevice,
     wheel_x: i32,
     wheel_y: i32,
-    last_pressure: f64
+    last_pressure: f64,
 }
 
 impl PlatformImpl {
@@ -118,7 +118,10 @@ impl PlatformImpl {
                 AbsoluteAxisCode::ABS_TILT_Y,
                 AbsInfo::new(0, -90, 90, 0, 0, 0),
             ))?
-            .with_keys(&AttributeSet::from_iter([KeyCode::BTN_TOOL_PEN, KeyCode::BTN_TOUCH]))?
+            .with_keys(&AttributeSet::from_iter([
+                KeyCode::BTN_TOOL_PEN,
+                KeyCode::BTN_TOUCH,
+            ]))?
             .with_properties(&AttributeSet::from_iter([PropType::DIRECT]))?
             .with_properties(&AttributeSet::from_iter([PropType::POINTER]))?
             .build()?;
@@ -144,7 +147,8 @@ impl PlatformImpl {
 
     pub(crate) fn move_mouse_abs(&mut self, x: i32, y: i32) -> Result<(), SimulationError> {
         let root_window = self.conn.setup().roots[0].root;
-        self.conn.warp_pointer(x11rb::NONE, root_window, 0, 0, 0, 0, x as i16, y as i16)?;
+        self.conn
+            .warp_pointer(x11rb::NONE, root_window, 0, 0, 0, 0, x as i16, y as i16)?;
         self.conn.flush()?;
         Ok(())
     }
@@ -313,7 +317,14 @@ impl PlatformImpl {
         Ok(())
     }
 
-    pub(crate) fn pen(&mut self, x: i32, y: i32, pressure: f64, tilt_x: i32, tilt_y: i32) -> Result<(), SimulationError> {
+    pub(crate) fn pen(
+        &mut self,
+        x: i32,
+        y: i32,
+        pressure: f64,
+        tilt_x: i32,
+        tilt_y: i32,
+    ) -> Result<(), SimulationError> {
         let (width, height) = self.get_screen_size()?;
         let (x, y) = (
             (x as f64 / width as f64 * 100_000.0).round() as i32,
@@ -322,17 +333,45 @@ impl PlatformImpl {
         let scaled_pressure = (pressure * 100_000.0).round() as i32;
         let mut events = vec![];
         if self.last_pressure < 0.00001 && pressure >= 0.00001 {
-            events.push(InputEvent::new(EventType::KEY.0, KeyCode::BTN_TOOL_PEN.0, 1));
+            events.push(InputEvent::new(
+                EventType::KEY.0,
+                KeyCode::BTN_TOOL_PEN.0,
+                1,
+            ));
             events.push(InputEvent::new(EventType::KEY.0, KeyCode::BTN_TOUCH.0, 1));
         }
-        events.push(InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_X.0, x));
-        events.push(InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_Y.0, y));
-        events.push(InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_PRESSURE.0, scaled_pressure));
-        events.push(InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_TILT_X.0, tilt_x));
-        events.push(InputEvent::new(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_TILT_Y.0, tilt_y));
+        events.push(InputEvent::new(
+            EventType::ABSOLUTE.0,
+            AbsoluteAxisCode::ABS_X.0,
+            x,
+        ));
+        events.push(InputEvent::new(
+            EventType::ABSOLUTE.0,
+            AbsoluteAxisCode::ABS_Y.0,
+            y,
+        ));
+        events.push(InputEvent::new(
+            EventType::ABSOLUTE.0,
+            AbsoluteAxisCode::ABS_PRESSURE.0,
+            scaled_pressure,
+        ));
+        events.push(InputEvent::new(
+            EventType::ABSOLUTE.0,
+            AbsoluteAxisCode::ABS_TILT_X.0,
+            tilt_x,
+        ));
+        events.push(InputEvent::new(
+            EventType::ABSOLUTE.0,
+            AbsoluteAxisCode::ABS_TILT_Y.0,
+            tilt_y,
+        ));
         if self.last_pressure >= 0.00001 && pressure < 0.00001 {
             events.push(InputEvent::new(EventType::KEY.0, KeyCode::BTN_TOUCH.0, 0));
-            events.push(InputEvent::new(EventType::KEY.0, KeyCode::BTN_TOOL_PEN.0, 0));
+            events.push(InputEvent::new(
+                EventType::KEY.0,
+                KeyCode::BTN_TOOL_PEN.0,
+                0,
+            ));
         }
         self.pen_device.emit(&events)?;
         self.last_pressure = pressure;

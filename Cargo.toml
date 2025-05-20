@@ -13,5 +13,8 @@ thiserror = "2.0.12"
 evdev = "0.13.1"
 x11rb = "0.13.1"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = { version = "0.24.0", features = ["highsierra"] }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.1", features = ["Win32_UI_Controls", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Input_Pointer", "Win32_UI_WindowsAndMessaging"] }
