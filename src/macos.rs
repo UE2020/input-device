@@ -202,6 +202,7 @@ impl PlatformImpl {
         if let Some(keycode) = key_to_cgkeycode(key) {
             let event = CGEvent::new_keyboard_event(self.source.clone(), keycode, true)
                 .map_err(|_| SimulationError::CoreGraphicsError)?;
+            event.set_flags(CGEventFlags::CGEventFlagNull);
             event.post(CGEventTapLocation::HID);
         }
         Ok(())
