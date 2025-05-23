@@ -235,6 +235,7 @@ impl PlatformImpl {
         if let Some(keycode) = key_to_cgkeycode(key) {
             let event = CGEvent::new_keyboard_event(self.source.clone(), keycode, false)
                 .map_err(|_| SimulationError::CoreGraphicsError)?;
+            let flags = event.get_flags();
             event.set_flags(flags & !CGEventFlags::CGEventFlagSecondaryFn);
             event.post(CGEventTapLocation::HID);
             self.show_cursor()?;
