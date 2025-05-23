@@ -225,7 +225,7 @@ impl PlatformImpl {
             let event = CGEvent::new_keyboard_event(self.source.clone(), keycode, true)
                 .map_err(|_| SimulationError::CoreGraphicsError)?;
             let flags = event.get_flags();
-            event.set_flags(flags & !CGEventFlagSecondaryFn);
+            event.set_flags(flags & !CGEventFlags::CGEventFlagSecondaryFn);
             event.post(CGEventTapLocation::HID);
         }
         Ok(())
