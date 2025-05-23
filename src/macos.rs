@@ -3,7 +3,7 @@ use core_graphics::event::*;
 use core_graphics::event_source::*;
 use core_graphics::geometry::CGPoint;
 
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 use crate::Key;
 use thiserror::Error;
@@ -236,7 +236,7 @@ impl PlatformImpl {
                 .map_err(|_| SimulationError::CoreGraphicsError)?;
             event.set_flags(CGEventFlags::CGEventFlagNull);
             event.post(CGEventTapLocation::HID);
-            self.show_cursor();
+            self.show_cursor()?;
         }
         Ok(())
     }
