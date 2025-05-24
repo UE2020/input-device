@@ -87,7 +87,8 @@ impl PlatformImpl {
                     }
                     if !touches.is_empty() {
                         unsafe {
-                            Pointer::InjectTouchInput(&touches).expect("All touches are valid");
+                            // TODO: handle errors here
+                            Pointer::InjectTouchInput(&touches).ok();
                         }
                     }
                     std::mem::drop(stored_touches);
