@@ -33,6 +33,8 @@ pub(crate) struct PlatformImpl {
 
     last_left_click: Instant,
     last_right_click: Instant,
+
+	flags: CGEventFlags
 }
 
 impl PlatformImpl {
@@ -50,6 +52,7 @@ impl PlatformImpl {
             right_mouse_down: false,
             last_left_click: Instant::now(),
             last_right_click: Instant::now(),
+			flags: CGEventFlags::CGEventFlagNull
         })
     }
 
@@ -220,12 +223,20 @@ impl PlatformImpl {
         ))
     }
 
-    pub(crate) fn key_down(&self, key: Key) -> Result<(), SimulationError> {
+    pub(crate) fn key_down(&mut self, key: Key) -> Result<(), SimulationError> {
         if let Some(keycode) = key_to_cgkeycode(key) {
+            // Update flags
+            match key {
+                Key::CapsLock => self.flags ^= CGEventFlags::CGEventFlagAlphaShift,
+                Key::LeftShift | Key::RightShift => self.flags |= CGEventFlags::CGEventFlagShift,
+                Key::LeftCtrl | Key::RightCtrl => self.flags |= CGEventFlags::CGEventFlagControl,
+                Key::LeftAlt | Key::RightAlt => self.flags |= CGEventFlags::CGEventFlagAlternate,
+                Key::LeftMeta | Key::RightMeta => self.flags |= CGEventFlags::CGEventFlagCommand,
+                _ => {}
+            }
             let event = CGEvent::new_keyboard_event(self.source.clone(), keycode, true)
                 .map_err(|_| SimulationError::CoreGraphicsError)?;
-            let flags = event.get_flags();
-            event.set_flags(flags & !CGEventFlags::CGEventFlagSecondaryFn);
+            event.set_flags(self.flags);
             event.post(CGEventTapLocation::HID);
         }
         Ok(())
@@ -233,10 +244,16 @@ impl PlatformImpl {
 
     pub(crate) fn key_up(&mut self, key: Key) -> Result<(), SimulationError> {
         if let Some(keycode) = key_to_cgkeycode(key) {
+            match key {
+                Key::LeftShift | Key::RightShift => self.flags &= !CGEventFlags::CGEventFlagShift,
+                Key::LeftCtrl | Key::RightCtrl => self.flags &= !CGEventFlags::CGEventFlagControl,
+                Key::LeftAlt | Key::RightAlt => self.flags &= !CGEventFlags::CGEventFlagAlternate,
+                Key::LeftMeta | Key::RightMeta => self.flags &= !CGEventFlags::CGEventFlagCommand,
+                _ => {}
+            }
             let event = CGEvent::new_keyboard_event(self.source.clone(), keycode, false)
                 .map_err(|_| SimulationError::CoreGraphicsError)?;
-            let flags = event.get_flags();
-            event.set_flags(flags & !CGEventFlags::CGEventFlagSecondaryFn);
+            event.set_flags(self.flags);
             event.post(CGEventTapLocation::HID);
             self.show_cursor()?;
         }
