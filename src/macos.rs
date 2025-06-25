@@ -34,7 +34,7 @@ pub(crate) struct PlatformImpl {
     last_left_click: Instant,
     last_right_click: Instant,
 
-	flags: CGEventFlags
+    flags: CGEventFlags
 }
 
 impl PlatformImpl {
@@ -52,7 +52,7 @@ impl PlatformImpl {
             right_mouse_down: false,
             last_left_click: Instant::now(),
             last_right_click: Instant::now(),
-			flags: CGEventFlags::CGEventFlagNull
+            flags: CGEventFlags::CGEventFlagNull
         })
     }
 
