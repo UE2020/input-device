@@ -101,11 +101,11 @@ impl PlatformImpl {
             .name("Simulated input-device Pen")
             .with_absolute_axis(&UinputAbsSetup::new(
                 AbsoluteAxisCode::ABS_X,
-                AbsInfo::new(0, 0, 100_000, 0, 0, 0),
+                AbsInfo::new(0, 0, 100_000, 0, 0, 10),
             ))?
             .with_absolute_axis(&UinputAbsSetup::new(
                 AbsoluteAxisCode::ABS_Y,
-                AbsInfo::new(0, 0, 100_000, 0, 0, 0),
+                AbsInfo::new(0, 0, 100_000, 0, 0, 10),
             ))?
             .with_absolute_axis(&UinputAbsSetup::new(
                 AbsoluteAxisCode::ABS_PRESSURE,
@@ -120,8 +120,9 @@ impl PlatformImpl {
                 AbsInfo::new(0, -90, 90, 0, 0, 0),
             ))?
             .with_keys(&AttributeSet::from_iter([
-                KeyCode::BTN_TOOL_PEN,
                 KeyCode::BTN_TOUCH,
+                KeyCode::BTN_TOOL_PEN,
+                KeyCode::BTN_STYLUS,
             ]))?
             .with_properties(&AttributeSet::from_iter([PropType::DIRECT]))?
             .with_properties(&AttributeSet::from_iter([PropType::POINTER]))?
