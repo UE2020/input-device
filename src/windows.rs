@@ -1,6 +1,7 @@
 use crate::Key;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
+use windows::Win32::System::Performance;
 use windows::Win32::UI::Controls;
 use windows::Win32::UI::HiDpi;
 use windows::Win32::UI::Input::KeyboardAndMouse;
@@ -24,13 +25,13 @@ impl Touch {
     fn into_touchinfo(
         self,
         flags: Pointer::POINTER_FLAGS,
-        time: u32,
+        time: i64,
         index: u32,
     ) -> Pointer::POINTER_TOUCH_INFO {
         let mut touch_info: Pointer::POINTER_TOUCH_INFO = unsafe { std::mem::zeroed() };
         touch_info.pointerInfo.pointerType = WindowsAndMessaging::PT_TOUCH;
         touch_info.pointerInfo.pointerId = index;
-        touch_info.pointerInfo.dwTime = time;
+        touch_info.pointerInfo.PerformanceCount = time as u64;
         touch_info.pointerInfo.ptPixelLocation.x = self.x;
         touch_info.pointerInfo.ptPixelLocation.y = self.y;
         touch_info.pointerInfo.pointerFlags = flags;
@@ -69,8 +70,13 @@ impl PlatformImpl {
             match touches_clone.upgrade() {
                 Some(stored_touches) => {
                     let stored_touches = stored_touches.lock().unwrap();
+
+                    let mut time: i64 = 0;
+                    unsafe {
+                        Performance::QueryPerformanceCounter(&mut time);
+                    }
+
                     let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![];
-                    let time = unsafe { WindowsAndMessaging::GetMessageTime() } as u32;
                     for (index, touch) in stored_touches.iter().enumerate() {
                         if !touch.active {
                             continue;
@@ -91,6 +97,7 @@ impl PlatformImpl {
                             Pointer::InjectTouchInput(&touches).ok();
                         }
                     }
+
                     std::mem::drop(stored_touches);
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }
@@ -314,12 +321,15 @@ impl PlatformImpl {
         let mut stored_touches = self.touches.lock().unwrap();
         stored_touches[slot as usize] = Touch { x, y, active: true };
 
-        let time = unsafe { WindowsAndMessaging::GetMessageTime() } as u32;
+        let mut time: i64 = 0;
+        unsafe {
+            Performance::QueryPerformanceCounter(&mut time);
+        }
 
         let touch_info = stored_touches[slot as usize].into_touchinfo(
             Pointer::POINTER_FLAG_DOWN
-            | Pointer::POINTER_FLAG_INRANGE
-            | Pointer::POINTER_FLAG_INCONTACT,
+                | Pointer::POINTER_FLAG_INRANGE
+                | Pointer::POINTER_FLAG_INCONTACT,
             time,
             slot as u32,
         );
@@ -332,8 +342,8 @@ impl PlatformImpl {
 
             let touch_info = touch.into_touchinfo(
                 Pointer::POINTER_FLAG_UPDATE
-                | Pointer::POINTER_FLAG_INRANGE
-                | Pointer::POINTER_FLAG_INCONTACT,
+                    | Pointer::POINTER_FLAG_INRANGE
+                    | Pointer::POINTER_FLAG_INCONTACT,
                 time,
                 index as u32,
             );
@@ -351,7 +361,10 @@ impl PlatformImpl {
         let mut stored_touches = self.touches.lock().unwrap();
         stored_touches[slot as usize].active = false;
 
-        let time = unsafe { WindowsAndMessaging::GetMessageTime() } as u32;
+        let mut time: i64 = 0;
+        unsafe {
+            Performance::QueryPerformanceCounter(&mut time);
+        }
 
         let touch_info = stored_touches[slot as usize].into_touchinfo(
             Pointer::POINTER_FLAG_UP,
@@ -367,8 +380,8 @@ impl PlatformImpl {
 
             let touch_info = touch.into_touchinfo(
                 Pointer::POINTER_FLAG_UPDATE
-                | Pointer::POINTER_FLAG_INRANGE
-                | Pointer::POINTER_FLAG_INCONTACT,
+                    | Pointer::POINTER_FLAG_INRANGE
+                    | Pointer::POINTER_FLAG_INCONTACT,
                 time,
                 index as u32,
             );
@@ -385,12 +398,15 @@ impl PlatformImpl {
         let mut stored_touches = self.touches.lock().unwrap();
         stored_touches[slot as usize] = Touch { x, y, active: true };
 
-        let time = unsafe { WindowsAndMessaging::GetMessageTime() } as u32;
+        let mut time: i64 = 0;
+        unsafe {
+            Performance::QueryPerformanceCounter(&mut time);
+        }
 
         let touch_info = stored_touches[slot as usize].into_touchinfo(
             Pointer::POINTER_FLAG_UPDATE
-            | Pointer::POINTER_FLAG_INRANGE
-            | Pointer::POINTER_FLAG_INCONTACT,
+                | Pointer::POINTER_FLAG_INRANGE
+                | Pointer::POINTER_FLAG_INCONTACT,
             time,
             slot as u32,
         );
@@ -403,8 +419,8 @@ impl PlatformImpl {
 
             let touch_info = touch.into_touchinfo(
                 Pointer::POINTER_FLAG_UPDATE
-                | Pointer::POINTER_FLAG_INRANGE
-                | Pointer::POINTER_FLAG_INCONTACT,
+                    | Pointer::POINTER_FLAG_INRANGE
+                    | Pointer::POINTER_FLAG_INCONTACT,
                 time,
                 index as u32,
             );

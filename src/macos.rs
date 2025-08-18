@@ -3,7 +3,7 @@ use core_graphics::event::*;
 use core_graphics::event_source::*;
 use core_graphics::geometry::CGPoint;
 
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 use crate::Key;
 use thiserror::Error;
@@ -34,7 +34,7 @@ pub(crate) struct PlatformImpl {
     last_left_click: Instant,
     last_right_click: Instant,
 
-    flags: CGEventFlags
+    flags: CGEventFlags,
 }
 
 impl PlatformImpl {
@@ -52,12 +52,14 @@ impl PlatformImpl {
             right_mouse_down: false,
             last_left_click: Instant::now(),
             last_right_click: Instant::now(),
-            flags: CGEventFlags::CGEventFlagNull
+            flags: CGEventFlags::CGEventFlagNull,
         })
     }
 
     fn show_cursor(&self) -> Result<(), SimulationError> {
-        self.display.show_cursor().map_err(|_| SimulationError::CoreGraphicsError)?;
+        self.display
+            .show_cursor()
+            .map_err(|_| SimulationError::CoreGraphicsError)?;
         Ok(())
     }
 
@@ -127,7 +129,10 @@ impl PlatformImpl {
             CGMouseButton::Left,
         )
         .map_err(|_| SimulationError::CoreGraphicsError)?;
-        event.set_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE, if is_double_click { 2 } else { 1 });
+        event.set_integer_value_field(
+            EventField::MOUSE_EVENT_CLICK_STATE,
+            if is_double_click { 2 } else { 1 },
+        );
         event.post(CGEventTapLocation::Session);
 
         Ok(())
@@ -153,7 +158,10 @@ impl PlatformImpl {
             CGMouseButton::Right,
         )
         .map_err(|_| SimulationError::CoreGraphicsError)?;
-        event.set_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE, if is_double_click { 2 } else { 1 });
+        event.set_integer_value_field(
+            EventField::MOUSE_EVENT_CLICK_STATE,
+            if is_double_click { 2 } else { 1 },
+        );
         event.post(CGEventTapLocation::Session);
 
         Ok(())
@@ -175,7 +183,10 @@ impl PlatformImpl {
             CGMouseButton::Left,
         )
         .map_err(|_| SimulationError::CoreGraphicsError)?;
-        event.set_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE, if is_double_click { 2 } else { 1 });
+        event.set_integer_value_field(
+            EventField::MOUSE_EVENT_CLICK_STATE,
+            if is_double_click { 2 } else { 1 },
+        );
         event.post(CGEventTapLocation::Session);
 
         Ok(())
@@ -202,7 +213,10 @@ impl PlatformImpl {
             CGMouseButton::Right,
         )
         .map_err(|_| SimulationError::CoreGraphicsError)?;
-        event.set_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE, if is_double_click { 2 } else { 1 });
+        event.set_integer_value_field(
+            EventField::MOUSE_EVENT_CLICK_STATE,
+            if is_double_click { 2 } else { 1 },
+        );
         event.post(CGEventTapLocation::Session);
 
         Ok(())
