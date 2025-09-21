@@ -19,6 +19,20 @@ struct Touch {
     x: i32,
     y: i32,
     active: bool,
+    /// If set, the next tick will emit this exact transition flag once.
+    /// After emission, it's cleared (and `active` set false if it was UP).
+    pending: Option<Pointer::POINTER_FLAGS>,
+}
+
+impl Default for Touch {
+    fn default() -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            active: false,
+            pending: None,
+        }
+    }
 }
 
 impl Touch {
@@ -35,11 +49,16 @@ impl Touch {
         touch_info.pointerInfo.ptPixelLocation.x = self.x;
         touch_info.pointerInfo.ptPixelLocation.y = self.y;
         touch_info.pointerInfo.pointerFlags = flags;
-        touch_info.touchMask = WindowsAndMessaging::TOUCH_MASK_CONTACTAREA;
+
+        // Provide a stable contact area + orientation; some stacks rely on this.
+        touch_info.touchMask =
+            WindowsAndMessaging::TOUCH_MASK_CONTACTAREA | WindowsAndMessaging::TOUCH_MASK_ORIENTATION;
         touch_info.rcContact.top = self.y - 2;
         touch_info.rcContact.bottom = self.y + 2;
         touch_info.rcContact.left = self.x - 2;
         touch_info.rcContact.right = self.x + 2;
+        touch_info.orientation = 90;
+
         touch_info
     }
 }
@@ -57,52 +76,81 @@ impl PlatformImpl {
             Pointer::InitializeTouchInjection(10, Pointer::TOUCH_FEEDBACK_DEFAULT)?;
         }
 
-        let touches = Arc::new(Mutex::new(
-            [Touch {
-                x: 0,
-                y: 0,
-                active: false,
-            }; 10],
-        ));
+        let touches = Arc::new(Mutex::new([Touch::default(); 10]));
         let touches_clone = Arc::downgrade(&touches);
 
+        // Worker thread: the ONLY place we call InjectTouchInput.
         std::thread::spawn(move || loop {
-            match touches_clone.upgrade() {
-                Some(stored_touches) => {
-                    let stored_touches = stored_touches.lock().unwrap();
-
-                    let mut time: i64 = 0;
-                    unsafe {
-                        Performance::QueryPerformanceCounter(&mut time);
-                    }
-
-                    let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![];
-                    for (index, touch) in stored_touches.iter().enumerate() {
-                        if !touch.active {
-                            continue;
-                        }
-
-                        let touch_info = touch.into_touchinfo(
-                            Pointer::POINTER_FLAG_UPDATE
-                                | Pointer::POINTER_FLAG_INRANGE
-                                | Pointer::POINTER_FLAG_INCONTACT,
-                            time,
-                            index as u32,
-                        );
-                        touches.push(touch_info);
-                    }
-                    if !touches.is_empty() {
-                        unsafe {
-                            // TODO: handle errors here
-                            Pointer::InjectTouchInput(&touches).ok();
-                        }
-                    }
-
-                    std::mem::drop(stored_touches);
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
+            let stored = match touches_clone.upgrade() {
+                Some(s) => s,
                 None => break,
+            };
+
+            // Build one batch per tick with consistent timestamp.
+            let mut time: i64 = 0;
+            unsafe { Performance::QueryPerformanceCounter(&mut time) };
+
+            // We'll mutate state based on what we successfully inject. To avoid
+            // racing with user code, we hold the lock during injection.
+            let mut guard = stored.lock().unwrap();
+
+            let mut events: Vec<Pointer::POINTER_TOUCH_INFO> = Vec::with_capacity(10);
+            // Track which indices emitted UP so we can deactivate them.
+            let mut emitted_up: [bool; 10] = [false; 10];
+
+            for (i, t) in guard.iter().copied().enumerate() {
+                // Decide flags for this tick.
+                let flags = if let Some(pending) = t.pending {
+                    // Apply app-requested transition exactly once.
+                    match pending {
+                        f if f.contains(Pointer::POINTER_FLAG_DOWN) => {
+                            Some(pending | Pointer::POINTER_FLAG_INRANGE | Pointer::POINTER_FLAG_INCONTACT)
+                        }
+                        f if f.contains(Pointer::POINTER_FLAG_UP) => {
+                            emitted_up[i] = true;
+                            Some(Pointer::POINTER_FLAG_UP)
+                        }
+                        _ => {
+                            // Treat any other pending as an UPDATE-like state.
+                            Some(Pointer::POINTER_FLAG_UPDATE | Pointer::POINTER_FLAG_INRANGE | Pointer::POINTER_FLAG_INCONTACT)
+                        }
+                    }
+                } else if t.active {
+                    // Refresh frame to keep the contact alive.
+                    Some(
+                        Pointer::POINTER_FLAG_UPDATE
+                            | Pointer::POINTER_FLAG_INRANGE
+                            | Pointer::POINTER_FLAG_INCONTACT,
+                    )
+                } else {
+                    None
+                };
+
+                if let Some(f) = flags {
+                    events.push(t.into_touchinfo(f, time, i as u32));
+                }
             }
+
+            if !events.is_empty() {
+                unsafe {
+                    // If injection fails, we *do not* clear pending/active,
+                    // so it will retry next tick.
+                    let _ = Pointer::InjectTouchInput(&events);
+                }
+
+                // Clear pendings we just attempted; deactivate any that had UP.
+                for i in 0..guard.len() {
+                    if guard[i].pending.is_some() {
+                        guard[i].pending = None;
+                    }
+                    if emitted_up[i] {
+                        guard[i].active = false;
+                    }
+                }
+            }
+
+            drop(guard);
+            std::thread::sleep(std::time::Duration::from_millis(1));
         });
 
         Ok(Self {
@@ -287,7 +335,6 @@ impl PlatformImpl {
             if input.Anonymous.ki.wScan & 0xE000 == 0xE000 {
                 input.Anonymous.ki.dwFlags |= KeyboardAndMouse::KEYEVENTF_EXTENDEDKEY;
             }
-
             KeyboardAndMouse::SendInput(
                 &[input],
                 std::mem::size_of::<KeyboardAndMouse::INPUT>() as i32,
@@ -308,7 +355,6 @@ impl PlatformImpl {
             if input.Anonymous.ki.wScan & 0xE000 == 0xE000 {
                 input.Anonymous.ki.dwFlags |= KeyboardAndMouse::KEYEVENTF_EXTENDEDKEY;
             }
-
             KeyboardAndMouse::SendInput(
                 &[input],
                 std::mem::size_of::<KeyboardAndMouse::INPUT>() as i32,
@@ -317,121 +363,41 @@ impl PlatformImpl {
         Ok(())
     }
 
+    // -------- TOUCH API (no direct injection here) --------
+
     pub fn touch_down(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
-        let mut stored_touches = self.touches.lock().unwrap();
-        stored_touches[slot as usize] = Touch { x, y, active: true };
-
-        let mut time: i64 = 0;
-        unsafe {
-            Performance::QueryPerformanceCounter(&mut time);
-        }
-
-        let touch_info = stored_touches[slot as usize].into_touchinfo(
-            Pointer::POINTER_FLAG_DOWN
-                | Pointer::POINTER_FLAG_INRANGE
-                | Pointer::POINTER_FLAG_INCONTACT,
-            time,
-            slot as u32,
-        );
-
-        let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![touch_info];
-        for (index, touch) in stored_touches.iter().enumerate() {
-            if !touch.active || index == slot as usize {
-                continue;
-            }
-
-            let touch_info = touch.into_touchinfo(
-                Pointer::POINTER_FLAG_UPDATE
-                    | Pointer::POINTER_FLAG_INRANGE
-                    | Pointer::POINTER_FLAG_INCONTACT,
-                time,
-                index as u32,
-            );
-
-            touches.push(touch_info);
-        }
-
-        unsafe {
-            Pointer::InjectTouchInput(&touches)?;
-        }
-        Ok(())
-    }
-
-    pub fn touch_up(&mut self, slot: i32) -> Result<(), SimulationError> {
-        let mut stored_touches = self.touches.lock().unwrap();
-        stored_touches[slot as usize].active = false;
-
-        let mut time: i64 = 0;
-        unsafe {
-            Performance::QueryPerformanceCounter(&mut time);
-        }
-
-        let touch_info = stored_touches[slot as usize].into_touchinfo(
-            Pointer::POINTER_FLAG_UP,
-            time,
-            slot as u32,
-        );
-
-        let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![touch_info];
-        for (index, touch) in stored_touches.iter().enumerate() {
-            if !touch.active || index == slot as usize {
-                continue;
-            }
-
-            let touch_info = touch.into_touchinfo(
-                Pointer::POINTER_FLAG_UPDATE
-                    | Pointer::POINTER_FLAG_INRANGE
-                    | Pointer::POINTER_FLAG_INCONTACT,
-                time,
-                index as u32,
-            );
-            touches.push(touch_info);
-        }
-
-        unsafe {
-            Pointer::InjectTouchInput(&touches)?;
-        }
+        let mut t = self.touches.lock().unwrap();
+        let idx = slot as usize;
+        t[idx].x = x;
+        t[idx].y = y;
+        t[idx].active = true;
+        t[idx].pending = Some(Pointer::POINTER_FLAG_DOWN);
         Ok(())
     }
 
     pub fn touch_move(&mut self, slot: i32, x: i32, y: i32) -> Result<(), SimulationError> {
-        let mut stored_touches = self.touches.lock().unwrap();
-        stored_touches[slot as usize] = Touch { x, y, active: true };
-
-        let mut time: i64 = 0;
-        unsafe {
-            Performance::QueryPerformanceCounter(&mut time);
+        let mut t = self.touches.lock().unwrap();
+        let idx = slot as usize;
+        t[idx].x = x;
+        t[idx].y = y;
+        // Keep contact alive. If the contact was not active yet,
+        // mark it active so the worker starts emitting UPDATEs.
+        if !t[idx].active {
+            t[idx].active = true;
         }
-
-        let touch_info = stored_touches[slot as usize].into_touchinfo(
-            Pointer::POINTER_FLAG_UPDATE
-                | Pointer::POINTER_FLAG_INRANGE
-                | Pointer::POINTER_FLAG_INCONTACT,
-            time,
-            slot as u32,
-        );
-
-        let mut touches: Vec<Pointer::POINTER_TOUCH_INFO> = vec![touch_info];
-        for (index, touch) in stored_touches.iter().enumerate() {
-            if !touch.active || index == slot as usize {
-                continue;
-            }
-
-            let touch_info = touch.into_touchinfo(
-                Pointer::POINTER_FLAG_UPDATE
-                    | Pointer::POINTER_FLAG_INRANGE
-                    | Pointer::POINTER_FLAG_INCONTACT,
-                time,
-                index as u32,
-            );
-            touches.push(touch_info);
-        }
-
-        unsafe {
-            Pointer::InjectTouchInput(&touches)?;
-        }
+        // No pending flag needed; worker will emit UPDATE each tick while active.
         Ok(())
     }
+
+    pub fn touch_up(&mut self, slot: i32) -> Result<(), SimulationError> {
+        let mut t = self.touches.lock().unwrap();
+        let idx = slot as usize;
+        // Do not clear `active` yet; the worker will emit one UP and then deactivate.
+        t[idx].pending = Some(Pointer::POINTER_FLAG_UP);
+        Ok(())
+    }
+
+    // ------------------ PEN (unchanged) -------------------
 
     pub(crate) fn pen(
         &mut self,
