@@ -150,7 +150,7 @@ impl PlatformImpl {
             }
 
             drop(guard);
-            std::thread::sleep(std::time::Duration::from_millis(8));
+            std::thread::sleep(std::time::Duration::from_millis(16));
         });
 
         Ok(Self {
