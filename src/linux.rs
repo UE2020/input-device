@@ -214,7 +214,7 @@ impl PlatformImpl {
                 y,
             ),
         ];
-        if self.wheel_x.abs() > 120 {
+        if self.wheel_x.abs() >= 120 {
             events.push(InputEvent::new(
                 EventType::RELATIVE.0,
                 RelativeAxisCode::REL_HWHEEL.0,
@@ -222,7 +222,7 @@ impl PlatformImpl {
             ));
             self.wheel_x = self.wheel_x % 120;
         }
-        if self.wheel_y.abs() > 120 {
+        if self.wheel_y.abs() >= 120 {
             events.push(InputEvent::new(
                 EventType::RELATIVE.0,
                 RelativeAxisCode::REL_WHEEL.0,
