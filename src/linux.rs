@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::Key;
 use evdev::{
     uinput::VirtualDevice, AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent, KeyCode,
@@ -24,7 +25,7 @@ pub enum SimulationError {
 }
 
 pub(crate) struct PlatformImpl {
-    conn: RustConnection,
+    conn: Arc<RustConnection>,
     rel_mouse_device: VirtualDevice,
     keyboard_device: VirtualDevice,
     touch_device: VirtualDevice,
@@ -134,6 +135,16 @@ impl PlatformImpl {
         }
 
         let (conn, _screen_num) = x11rb::connect(None)?;
+        let conn = Arc::new(conn);
+        let event_conn = conn.clone();
+        std::thread::spawn(move || {
+            loop {
+                match event_conn.wait_for_event() {
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
+        });
 
         Ok(Self {
             wheel_x: 0,
