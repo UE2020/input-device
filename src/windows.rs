@@ -1,7 +1,6 @@
 use crate::Key;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
-use windows::Win32::System::Performance;
 use windows::Win32::UI::Controls;
 use windows::Win32::UI::HiDpi;
 use windows::Win32::UI::Input::KeyboardAndMouse;
@@ -183,10 +182,13 @@ impl PlatformImpl {
             Anonymous: unsafe { std::mem::zeroed() },
         };
         let (w, h) = self.get_screen_size()?;
-        input.Anonymous.mi.dx = (x * 65535) / w;
-        input.Anonymous.mi.dy = (y * 65535) / h;
+        let left = unsafe { WindowsAndMessaging::GetSystemMetrics(WindowsAndMessaging::SM_XVIRTUALSCREEN) };
+        let top = unsafe { WindowsAndMessaging::GetSystemMetrics(WindowsAndMessaging::SM_YVIRTUALSCREEN) };
+
+        input.Anonymous.mi.dx = ((x - left) * 65535) / w;
+        input.Anonymous.mi.dy = ((y - top) * 65535) / h;
         input.Anonymous.mi.dwFlags =
-            KeyboardAndMouse::MOUSEEVENTF_MOVE | KeyboardAndMouse::MOUSEEVENTF_ABSOLUTE;
+            KeyboardAndMouse::MOUSEEVENTF_MOVE | KeyboardAndMouse::MOUSEEVENTF_ABSOLUTE | KeyboardAndMouse::MOUSEEVENTF_VIRTUALDESK;
 
         unsafe {
             KeyboardAndMouse::SendInput(
